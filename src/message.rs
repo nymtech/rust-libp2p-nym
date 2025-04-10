@@ -1,9 +1,10 @@
 use libp2p::core::PeerId;
 use nym_sphinx::addressing::clients::Recipient;
-use rand_core::{OsRng, RngCore};
+use rand::rngs::OsRng;
+use rand::RngCore;
 use std::fmt::{Debug, Formatter};
 
-use crate::error::Error;
+use super::error::Error;
 
 const RECIPIENT_LENGTH: usize = Recipient::LEN;
 const CONNECTION_ID_LENGTH: usize = 32;
@@ -154,14 +155,14 @@ impl ConnectionMessage {
                     return Err(Error::ConnectionMessageBytesNoPeerId);
                 }
                 PeerId::from_bytes(&bytes[CONNECTION_ID_LENGTH + 1 + RECIPIENT_LENGTH..])
-                    .map_err(Error::InvalidPeerIdBytes)?
+                    .map_err(|_| Error::InvalidPeerIdBytes)?
             }
             None => {
                 if bytes.len() < CONNECTION_ID_LENGTH + 2 {
                     return Err(Error::ConnectionMessageBytesNoPeerId);
                 }
                 PeerId::from_bytes(&bytes[CONNECTION_ID_LENGTH + 1..])
-                    .map_err(Error::InvalidPeerIdBytes)?
+                    .map_err(|_| Error::InvalidPeerIdBytes)?
             }
         };
         Ok(ConnectionMessage {

@@ -1,8 +1,7 @@
 use libp2p::core::multiaddr;
 use nym_sphinx::addressing::clients::RecipientFormattingError;
-use tokio_tungstenite::tungstenite::Error as WsError;
 
-use crate::message::SubstreamId;
+use super::message::SubstreamId;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -12,18 +11,6 @@ pub enum Error {
     FailedToFormatMultiaddr(#[from] multiaddr::Error),
     #[error("unexpected protocol in multiaddress")]
     InvalidProtocolForMultiaddr,
-    #[error("websocket stream error")]
-    WebsocketStreamError(#[from] WsError),
-    #[error("websocket stream read returned None")]
-    WebsocketStreamReadNone,
-    #[error("nym message error")]
-    NymMessageError(String),
-    #[error("unexpected message received over mixnet")]
-    UnexpectedNymMessage,
-    #[error("unexpected response to get self address request")]
-    UnexpectedSelfAddressResponse,
-    #[error("unknown nym message")]
-    UnknownNymMessage,
     #[error("failed to decode message")]
     InvalidMessageBytes,
     #[error("no connection found for ConnectionResponse")]
@@ -43,7 +30,7 @@ pub enum Error {
     #[error("failed to decode ConnectionMessage; no peer ID")]
     ConnectionMessageBytesNoPeerId,
     #[error("invalid peer ID bytes")]
-    InvalidPeerIdBytes(#[from] multihash::Error),
+    InvalidPeerIdBytes,
     #[error("invalid recipient bytes")]
     InvalidRecipientBytes(#[from] RecipientFormattingError),
     #[error("invalid recipient prefix byte")]
@@ -61,17 +48,15 @@ pub enum Error {
     #[error("no substream found for given ID")]
     SubstreamIdDoesNotExist(SubstreamId),
     #[error("recv error: channel closed")]
-    OneshotRecvError(#[from] tokio::sync::oneshot::error::RecvError),
-    #[error("failed to send new substream; receiver dropped")]
-    SubstreamSendError,
+    OneshotRecvFailure(#[from] tokio::sync::oneshot::error::RecvError),
     #[error("recv error: channel closed")]
-    RecvError,
+    RecvFailure,
     #[error("outbound send error")]
-    OutboundSendError(String),
+    OutboundSendFailure(String),
     #[error("inbound send error")]
-    InboundSendError(String),
+    InboundSendFailure(String),
     #[error("failed to send new connection; receiver dropped")]
-    ConnectionSendError,
+    ConnectionSendFailure,
     #[error("failed to send initial TransportEvent::NewAddress")]
     SendErrorTransportEvent,
     #[error("dial timed out")]

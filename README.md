@@ -2,6 +2,8 @@
 
 This repo contains an implementation of a libp2p transport using the Nym mixnet.
 
+TODO UPDATE EVERYTHING BELOW HERE
+
 ## Requirements
 
 - Rust 1.68.2
@@ -52,7 +54,7 @@ Install `protoc`. On Ubuntu/Debian, run: `sudo apt-get install
 protobuf-compiler`.
 
 Ensure that docker is installed on the machine where the tests need to
-be run. 
+be run.
 
 Then, run the following as usual.
 

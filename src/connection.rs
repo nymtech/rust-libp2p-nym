@@ -1,4 +1,5 @@
 use libp2p::core::{muxing::StreamMuxerEvent, PeerId, StreamMuxer};
+use log::debug;
 use nym_sphinx::addressing::clients::Recipient;
 use std::{
     collections::{HashMap, HashSet},
@@ -13,14 +14,13 @@ use tokio::sync::{
     mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
     oneshot,
 };
-use tracing::debug;
 
-use crate::error::Error;
-use crate::message::{
+use super::error::Error;
+use super::message::{
     ConnectionId, Message, OutboundMessage, SubstreamId, SubstreamMessage, SubstreamMessageType,
     TransportMessage,
 };
-use crate::substream::Substream;
+use super::substream::Substream;
 
 /// Connection represents the result of a connection setup process.
 /// It implements `StreamMuxer` and thus has stream multiplexing built in.
@@ -109,7 +109,7 @@ impl Connection {
                     },
                 }),
             })
-            .map_err(|e| Error::OutboundSendError(e.to_string()))?;
+            .map_err(|e| Error::OutboundSendFailure(e.to_string()))?;
 
         // track pending outbound substreams
         // TODO we should probably lock this? storing map values should be atomic
@@ -123,7 +123,7 @@ impl Connection {
     // creates a new substream instance with the given ID.
     fn new_substream(&mut self, id: SubstreamId) -> Result<Substream, Error> {
         // check we don't already have a substream with this ID
-        if self.substream_inbound_txs.get(&id).is_some() {
+        if self.substream_inbound_txs.contains_key(&id) {
             return Err(Error::SubstreamIdExists(id));
         }
 
@@ -159,7 +159,7 @@ impl Connection {
         // notify poll_close that the substream is closed
         self.close_tx
             .send(substream_id)
-            .map_err(|e| Error::InboundSendError(e.to_string()))
+            .map_err(|e| Error::InboundSendFailure(e.to_string()))
     }
 }
 
@@ -217,13 +217,13 @@ impl StreamMuxer for Connection {
                                 },
                             }),
                         })
-                        .map_err(|e| Error::OutboundSendError(e.to_string()))?;
+                        .map_err(|e| Error::OutboundSendFailure(e.to_string()))?;
                     debug!("wrote OpenResponse for substream: {:?}", &msg.substream_id);
 
                     // send the substream to our own channel to be returned in poll_inbound
                     self.inbound_open_tx
                         .send(substream)
-                        .map_err(|e| Error::InboundSendError(e.to_string()))?;
+                        .map_err(|e| Error::InboundSendFailure(e.to_string()))?;
 
                     debug!("new inbound substream: {:?}", &msg.substream_id);
                 }
@@ -277,14 +277,12 @@ impl PendingConnection {
 
 #[cfg(test)]
 mod test {
+    use super::super::message::InboundMessage;
+    use super::super::mixnet::initialize_mixnet;
+    use super::*;
     use futures::future::poll_fn;
     use futures::{AsyncReadExt, AsyncWriteExt, FutureExt};
-    use testcontainers::clients;
-
-    use super::*;
-    use crate::message::InboundMessage;
-    use crate::mixnet::initialize_mixnet;
-    use crate::test_utils::create_nym_client;
+    use nym_sdk::mixnet::MixnetClient;
 
     async fn inbound_receive_and_send(
         connection_id: ConnectionId,
@@ -309,16 +307,14 @@ mod test {
 
     #[tokio::test]
     async fn test_connection_stream_muxer() {
-        let docker_client = clients::Cli::default();
-        let nym_id = "test_connection_stream_muxer_sender";
-        let (_container1, sender_uri) = create_nym_client(&docker_client, nym_id);
+        let client = MixnetClient::connect_new().await.unwrap();
         let (sender_address, mut sender_mixnet_inbound_rx, sender_outbound_tx) =
-            initialize_mixnet(&sender_uri, None).await.unwrap();
+            initialize_mixnet(client, None).await.unwrap();
 
-        let nym_id = "test_connection_stream_muxer_recipient";
-        let (_container2, recipient_uri) = create_nym_client(&docker_client, nym_id);
+        let client2 = MixnetClient::connect_new().await.unwrap();
+
         let (recipient_address, mut recipient_mixnet_inbound_rx, recipient_outbound_tx) =
-            initialize_mixnet(&recipient_uri, None).await.unwrap();
+            initialize_mixnet(client2, None).await.unwrap();
 
         let connection_id = ConnectionId::generate();
 

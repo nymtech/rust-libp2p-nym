@@ -1,7 +1,7 @@
+use log::{debug, warn};
 use std::collections::BTreeSet;
-use tracing::{debug, warn};
 
-use crate::message::TransportMessage;
+use super::message::TransportMessage;
 
 /// MessageQueue is a queue of messages, ordered by nonce, that we've
 /// received but are not yet able to process because we're waiting for
@@ -76,9 +76,7 @@ impl MessageQueue {
     }
 
     pub(crate) fn pop(&mut self) -> Option<TransportMessage> {
-        let Some(head) = self.queue.first() else {
-            return None;
-        };
+        let head = self.queue.first()?;
 
         if head.nonce == self.next_expected_nonce {
             self.next_expected_nonce = self.next_expected_nonce.wrapping_add(1);
@@ -91,7 +89,7 @@ impl MessageQueue {
 
 #[cfg(test)]
 mod test {
-    use crate::message::{ConnectionId, SubstreamId, SubstreamMessage};
+    use super::super::message::{ConnectionId, SubstreamId, SubstreamMessage};
 
     use super::*;
 
