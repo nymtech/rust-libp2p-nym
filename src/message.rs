@@ -1,4 +1,5 @@
 use libp2p::core::PeerId;
+use nym_sdk::mixnet::AnonymousSenderTag;
 use nym_sphinx::addressing::clients::Recipient;
 use rand::rngs::OsRng;
 use rand::RngCore;
@@ -76,8 +77,8 @@ pub(crate) enum Message {
 pub(crate) struct ConnectionMessage {
     pub(crate) peer_id: PeerId,
     pub(crate) id: ConnectionId,
-    /// recipient is the sender's Nym address.
-    /// only required if this is a ConnectionRequest.
+    // only required if this is a ConnectionRequest.
+    // this is the nym address of the initiator of a connection request, so the recipient could use it to reply. Lets keep that as a None for the moment.
     pub(crate) recipient: Option<Recipient>,
 }
 

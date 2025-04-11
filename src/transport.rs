@@ -22,6 +22,7 @@ use tokio::{
     time::{timeout, Duration},
 };
 use tokio_stream::wrappers::UnboundedReceiverStream;
+use tracing::info;
 
 use super::connection::{Connection, PendingConnection};
 use super::error::Error;
@@ -222,9 +223,10 @@ impl NymTransport {
     /// handle_connection_request handles an incoming connection request, sends back a
     /// connection response, and finally completes the upgrade into a Connection.
     fn handle_connection_request(&mut self, msg: &ConnectionMessage) -> Result<Connection, Error> {
-        if msg.recipient.is_none() {
-            return Err(Error::NoneRecipientInConnectionRequest);
-        }
+        // this isn't needed anymore since we're going to use the sender_tag for replies, no need to attach the nym addr in the clear
+        // if msg.recipient.is_none() {
+        //     return Err(Error::NoneRecipientInConnectionRequest);
+        // }
 
         // ensure we don't already have a conn with the same id
         if self.connections.contains_key(&msg.id) {
@@ -330,6 +332,7 @@ impl NymTransport {
 
     /// handle_inbound handles an inbound message from the mixnet, received via self.inbound_stream.
     fn handle_inbound(&mut self, msg: Message) -> Result<InboundTransportEvent, Error> {
+        // TODO parse sender_tag from incoming message before matching, pass to handle_ fns
         match msg {
             Message::ConnectionRequest(inner) => {
                 debug!("got inbound connection request {:?}", inner);
@@ -396,6 +399,7 @@ impl Transport for NymTransport {
         _listner_id: ListenerId,
         _multi_addr: libp2p::Multiaddr,
     ) -> Result<(), TransportError<Self::Error>> {
+        info!("called listen_on, this is currently just a dummy function - client starts listening on new()");
         Ok(())
     }
 
@@ -414,8 +418,6 @@ impl Transport for NymTransport {
         true
     }
 
-    // note: `dial` from trait: `fn(&mut Self, libp2p::Multiaddr, libp2p::libp2p_core::transport::DialOpts) -> Result<<Self as libp2p::Transport>::Dial, TransportError<<Self as libp2p::Transport>::Error>>`
-    // looks like we have to add DialOpts - https://libp2p.github.io/rust-libp2p/libp2p/core/transport/struct.DialOpts.html
     fn dial(
         &mut self,
         addr: Multiaddr,
@@ -436,8 +438,8 @@ impl Transport for NymTransport {
 
         // put ConnectionRequest message into outbound message channel
         let msg = ConnectionMessage {
-            peer_id: self.peer_id(),
-            recipient: Some(self.self_address),
+            peer_id: self.peer_id(),            // TODO randomise per connection?
+            recipient: Some(self.self_address), // TODO this is the addr of the sender to be used for replying when we have nym addrs in the open, we can remove later on or just keep as None
             id,
         };
 
@@ -463,14 +465,6 @@ impl Transport for NymTransport {
         }
         .boxed())
     }
-
-    // dial_as_listener currently just calls self.dial().
-    // fn dial_as_listener(
-    //     &mut self,
-    //     addr: Multiaddr,
-    // ) -> Result<Self::Dial, TransportError<Self::Error>> {
-    //     self.dial(addr)
-    // }
 
     fn poll(
         mut self: Pin<&mut Self>,
@@ -513,10 +507,6 @@ impl Transport for NymTransport {
         self.waker = Some(cx.waker().clone());
         Poll::Pending
     }
-
-    // fn address_translation(&self, _listen: &Multiaddr, _observed: &Multiaddr) -> Option<Multiaddr> {
-    //     None
-    // }
 }
 
 fn nym_address_to_multiaddress(addr: Recipient) -> Result<Multiaddr, Error> {

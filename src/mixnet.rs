@@ -1,7 +1,9 @@
 use futures::{pin_mut, select};
 use futures::{FutureExt, StreamExt};
 use log::debug;
-use nym_sdk::mixnet::{IncludedSurbs, MixnetClient, MixnetClientSender, MixnetMessageSender};
+use nym_sdk::mixnet::{
+    AnonymousSenderTag, IncludedSurbs, MixnetClient, MixnetClientSender, MixnetMessageSender,
+};
 use nym_sphinx::addressing::clients::Recipient;
 use nym_sphinx::receiver::ReconstructedMessage;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
@@ -9,7 +11,7 @@ use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use super::error::Error;
 use super::message::*;
 
-/// initialize_mixnet initializes a read/write connection to a Nym websockets endpoint.
+/// initialize_mixnet initializes a read/write connection to a Nym Client.
 /// It starts a task that listens for inbound messages from the endpoint and writes outbound messages to the endpoint.
 pub(crate) async fn initialize_mixnet(
     client: MixnetClient,
@@ -105,15 +107,29 @@ async fn write_bytes(
     message: &[u8],
 ) -> Result<(), Error> {
     if let Err(_err) = mixnet_sender
-        .send_message(recipient, message, IncludedSurbs::ExposeSelfAddress)
+        .send_message(recipient, message, IncludedSurbs::default()) // was IncludedSurbs::ExposeSelfAddress
         .await
     {
         return Err(Error::Unimplemented);
     }
-
     debug!(
         "wrote message to mixnet: recipient: {:?}",
         recipient.to_string()
+    );
+    Ok(())
+}
+
+async fn write_reply_bytes(
+    mixnet_sender: &MixnetClientSender,
+    sender_tag: AnonymousSenderTag,
+    message: &[u8],
+) -> Result<(), Error> {
+    if let Err(_err) = mixnet_sender.send_reply(sender_tag, message).await {
+        return Err(Error::Unimplemented);
+    }
+    debug!(
+        "wrote reply to mixnet: sender_tag: {:?}",
+        sender_tag.to_string()
     );
     Ok(())
 }
