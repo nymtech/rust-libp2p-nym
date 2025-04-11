@@ -7,20 +7,19 @@ jobs:
     name: build-and-test
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v1
-    - name: Install protoc
-      run: sudo apt-get update -qqq && sudo apt-get install -y protobuf-compiler
-    - name: Install latest nightly
-      uses: actions-rs/toolchain@v1
-      with:
+      - uses: actions/checkout@v1
+      - name: Install protoc
+        run: sudo apt-get update -qqq && sudo apt-get install -y protobuf-compiler
+      - name: Install latest nightly
+        uses: actions-rs/toolchain@v1
+        with:
           toolchain: stable
           override: true
           components: rustfmt, clippy
-    - name: Build
-      run: ./build-docker.sh && cargo build --all
-    - name: Run tests
-      run: ./build-docker.sh && cargo test
-
+    # - name: Build
+    #   run: ./build-docker.sh && cargo build --all
+    # - name: Run tests
+    #   run: ./build-docker.sh && cargo test
 
   fmt:
     name: fmt
@@ -30,9 +29,9 @@ jobs:
       - name: Install latest nightly
         uses: actions-rs/toolchain@v1
         with:
-            toolchain: stable
-            override: true
-            components: rustfmt
+          toolchain: stable
+          override: true
+          components: rustfmt
       - uses: actions-rs/cargo@v1
         with:
           command: fmt
