@@ -4,24 +4,24 @@ use futures::prelude::*;
 use libp2p::SwarmBuilder;
 use libp2p::{ping, swarm::SwarmEvent, Multiaddr};
 use libp2p_identity::{Keypair, PeerId};
-use log::{debug, info, LevelFilter};
+use log::LevelFilter;
 use rust_libp2p_nym::transport::NymTransport;
 use std::{error::Error, time::Duration};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     pretty_env_logger::formatted_timed_builder()
-        .filter_level(LevelFilter::Warn)
+        .filter_level(LevelFilter::Debug)
         .filter(Some("libp2p_ping"), LevelFilter::Debug)
         .init();
 
     let local_key = Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
-    info!("Local peer id: {local_peer_id:?}");
+    println!("Local peer id: {local_peer_id:?}");
 
     let mut swarm = {
-        debug!("Running `ping` example using NymTransport");
-        let client = nym_sdk::mixnet::MixnetClient::connect_new().await.unwrap();
+        println!("Running `ping` example using NymTransport");
+        let client = nym_sdk::mixnet::MixnetClient::connect_new().await?;
         let transport = NymTransport::new(client, local_key.clone()).await?;
 
         SwarmBuilder::with_new_identity()
@@ -34,11 +34,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Dial the peer identified by the multi-address given as the second
     // command-line argument, if any.
-    if let Some(addr) = std::env::args().nth(1) {
-        let remote: Multiaddr = addr.parse()?;
-        swarm.dial(remote)?;
-        println!("Dialed {addr}")
-    }
+    // if let Some(addr) = std::env::args().nth(1) {
+    //     let remote: Multiaddr = addr.parse()?;
+    //     swarm.dial(remote)?;
+    //     println!("Dialed {addr}")
+    // }
 
     loop {
         match swarm.select_next_some().await {

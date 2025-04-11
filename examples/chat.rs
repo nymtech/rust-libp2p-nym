@@ -31,10 +31,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let local_key = Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
-    info!("Local peer id: {local_peer_id:?}");
+    println!("Local peer id: {local_peer_id:?}");
 
-    debug!("Running `chat` example using NymTransport");
-    let client = nym_sdk::mixnet::MixnetClient::connect_new().await.unwrap();
+    println!("Running `chat` example using NymTransport");
+    let client = nym_sdk::mixnet::MixnetClient::connect_new().await?;
     let transport = NymTransport::new(client, local_key.clone()).await?;
 
     let mut swarm = SwarmBuilder::with_new_identity()
@@ -78,7 +78,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!("Enter messages via STDIN and they will be sent to connected peers using Gossipsub");
 
     // Dial the peer identified by the multi-address given as the second
-    // command-line argument, if any.
+    // command-line argument, if any, else dial self
     if let Some(addr) = std::env::args().nth(1) {
         let remote: Multiaddr = addr.parse()?;
         swarm.dial(remote)?;
