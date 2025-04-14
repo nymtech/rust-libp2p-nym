@@ -237,12 +237,12 @@ impl NymTransport {
             return Err(Error::ConnectionIDExists);
         }
 
-        // We can still use the recipient from the message even with sender_tag
-        let recipient = if let Some(rec) = msg.recipient {
-            rec
-        } else {
-            return Err(Error::NoneRecipientInConnectionRequest);
-        };
+        // TODO remove comment We can still use the recipient from the message even with sender_tag
+        // let recipient = if let Some(rec) = msg.recipient {
+        //     rec
+        // } else {
+        //     return Err(Error::NoneRecipientInConnectionRequest);
+        // };
 
         // Create connection with sender_tag
         let (conn, conn_tx) = self.create_connection_types(
@@ -461,10 +461,13 @@ impl Transport for NymTransport {
         let inner_pending_conn = PendingConnection::new(recipient, connection_tx);
         self.pending_dials.insert(id.clone(), inner_pending_conn);
 
+        let connection_keypair = Keypair::generate_ed25519();
+        let connection_peer_id = PeerId::from(connection_keypair.public());
+
         // put ConnectionRequest message into outbound message channel
         let msg = ConnectionMessage {
-            peer_id: self.peer_id(),            // TODO randomise per connection?
-            recipient: Some(self.self_address), // TODO this is the addr of the sender to be used for replying when we have nym addrs in the open, we can remove later on or just keep as None
+            peer_id: connection_peer_id,
+            recipient: None, // was Some(self.self_address)
             id,
         };
 
