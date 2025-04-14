@@ -244,10 +244,13 @@ impl NymTransport {
         //     return Err(Error::NoneRecipientInConnectionRequest);
         // };
 
+        // TODO remove this placeholder once you comb through fns and actually remove the requrements - for the moment use our (receiver's) address
+        let remote_addr_for_conn = self.self_address.clone(); // Just a placeholder
+
         // Create connection with sender_tag
         let (conn, conn_tx) = self.create_connection_types(
             msg.peer_id,
-            recipient,
+            remote_addr_for_conn,
             msg.id.clone(),
             sender_tag.clone(),
         );
@@ -265,7 +268,7 @@ impl NymTransport {
         self.outbound_tx
             .send(OutboundMessage {
                 message: Message::ConnectionResponse(resp),
-                recipient: Some(recipient),
+                recipient: None,
                 sender_tag,
             })
             .map_err(|e| Error::OutboundSendFailure(e.to_string()))?;
@@ -461,8 +464,8 @@ impl Transport for NymTransport {
         let inner_pending_conn = PendingConnection::new(recipient, connection_tx);
         self.pending_dials.insert(id.clone(), inner_pending_conn);
 
-        let connection_keypair = Keypair::generate_ed25519();
-        let connection_peer_id = PeerId::from(connection_keypair.public());
+        let local_key = Keypair::generate_ed25519();
+        let connection_peer_id = PeerId::from(local_key.public());
 
         // put ConnectionRequest message into outbound message channel
         let msg = ConnectionMessage {

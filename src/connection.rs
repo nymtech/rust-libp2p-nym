@@ -246,7 +246,12 @@ impl StreamMuxer for Connection {
                     // send the response to the remote peer
                     self.mixnet_outbound_tx
                         .send(OutboundMessage {
-                            recipient: Some(self.remote_recipient),
+                            // recipient: Some(self.remote_recipient),
+                            recipient: if self.sender_tag.is_some() {
+                                None
+                            } else {
+                                Some(self.remote_recipient)
+                            },
                             message: Message::TransportMessage(TransportMessage {
                                 nonce,
                                 id: self.id.clone(),
@@ -456,5 +461,14 @@ mod test {
             3,
         )
         .await;
+    }
+
+    #[tokio::test]
+    async fn new_peer_id_per_conn() {
+        /*
+        - make client
+        - make 2 conns
+        - check each conn has different peerid
+        */
     }
 }

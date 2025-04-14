@@ -5,8 +5,11 @@ use libp2p::SwarmBuilder;
 use libp2p::{ping, swarm::SwarmEvent, Multiaddr};
 use libp2p_identity::{Keypair, PeerId};
 use log::LevelFilter;
+use nym_sdk::mixnet::{MixnetClientBuilder, StoragePaths};
 use rust_libp2p_nym::transport::NymTransport;
+use std::path::PathBuf;
 use std::{error::Error, time::Duration};
+use tempfile::TempDir;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -21,7 +24,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let mut swarm = {
         println!("Running `ping` example using NymTransport");
-        let client = nym_sdk::mixnet::MixnetClient::connect_new().await?;
+        let config_dir = PathBuf::from(TempDir::new().unwrap().path().to_str().unwrap());
+        let storage_paths = StoragePaths::new_from_dir(&config_dir).unwrap();
+
+        // Create the client with a storage backend, and enable it by giving it some paths. If keys
+        // exists at these paths, they will be loaded, otherwise they will be generated.
+        let client = MixnetClientBuilder::new_with_default_storage(storage_paths)
+            .await
+            .unwrap()
+            .build()
+            .unwrap();
+
+        let client = client.connect_to_mixnet().await.unwrap();
+
         let transport = NymTransport::new(client, local_key.clone()).await?;
 
         SwarmBuilder::with_new_identity()
