@@ -1,5 +1,6 @@
 use libp2p::core::{muxing::StreamMuxerEvent, PeerId, StreamMuxer};
 use log::debug;
+use nym_sdk::mixnet::AnonymousSenderTag;
 use nym_sphinx::addressing::clients::Recipient;
 use std::{
     collections::{HashMap, HashSet},
@@ -48,6 +49,9 @@ pub struct Connection {
     /// also passed to each substream so they can write to the mixnet
     pub(crate) mixnet_outbound_tx: UnboundedSender<OutboundMessage>,
 
+    /// sender_tag for SURB replies to incoming messages
+    pub(crate) sender_tag: Option<AnonymousSenderTag>,
+
     /// inbound substream open requests; used in poll_inbound
     inbound_open_tx: UnboundedSender<Substream>,
     inbound_open_rx: UnboundedReceiver<Substream>,
@@ -64,12 +68,13 @@ pub struct Connection {
 }
 
 impl Connection {
-    pub(crate) fn new(
+    pub(crate) fn new_with_sender_tag(
         peer_id: PeerId,
         remote_recipient: Recipient,
         id: ConnectionId,
         inbound_rx: UnboundedReceiver<SubstreamMessage>,
         mixnet_outbound_tx: UnboundedSender<OutboundMessage>,
+        sender_tag: Option<AnonymousSenderTag>,
     ) -> Self {
         let (inbound_open_tx, inbound_open_rx) = unbounded_channel();
         let (close_tx, close_rx) = unbounded_channel();
@@ -83,6 +88,7 @@ impl Connection {
             substream_inbound_txs: HashMap::new(),
             substream_close_txs: HashMap::new(),
             mixnet_outbound_tx,
+            sender_tag,
             inbound_open_tx,
             inbound_open_rx,
             close_tx,
@@ -96,10 +102,10 @@ impl Connection {
         let substream_id = SubstreamId::generate();
         let nonce = self.message_nonce.fetch_add(1, Ordering::SeqCst);
 
-        // send the substream open request that requests to open a substream with the given ID
-        self.mixnet_outbound_tx
-            .send(OutboundMessage {
-                recipient: self.remote_recipient,
+        // Create an OutboundMessage with sender_tag if available
+        let outbound_msg = if let Some(sender_tag) = &self.sender_tag {
+            OutboundMessage {
+                recipient: None,
                 message: Message::TransportMessage(TransportMessage {
                     nonce,
                     id: self.id.clone(),
@@ -108,7 +114,26 @@ impl Connection {
                         message_type: SubstreamMessageType::OpenRequest,
                     },
                 }),
-            })
+                sender_tag: Some(sender_tag.clone()),
+            }
+        } else {
+            OutboundMessage {
+                recipient: Some(self.remote_recipient),
+                message: Message::TransportMessage(TransportMessage {
+                    nonce,
+                    id: self.id.clone(),
+                    message: SubstreamMessage {
+                        substream_id: substream_id.clone(),
+                        message_type: SubstreamMessageType::OpenRequest,
+                    },
+                }),
+                sender_tag: None,
+            }
+        };
+
+        // Send the outbound message
+        self.mixnet_outbound_tx
+            .send(outbound_msg)
             .map_err(|e| Error::OutboundSendFailure(e.to_string()))?;
 
         // track pending outbound substreams
@@ -136,15 +161,29 @@ impl Connection {
             waker.wake();
         }
 
-        Ok(Substream::new(
-            self.remote_recipient,
-            self.id.clone(),
-            id,
-            inbound_rx,
-            self.mixnet_outbound_tx.clone(),
-            close_rx,
-            self.message_nonce.clone(),
-        ))
+        // Use new_with_sender_tag instead of new when sender_tag is present
+        if let Some(sender_tag) = &self.sender_tag {
+            Ok(Substream::new_with_sender_tag(
+                self.remote_recipient,
+                self.id.clone(),
+                id,
+                inbound_rx,
+                self.mixnet_outbound_tx.clone(),
+                close_rx,
+                self.message_nonce.clone(),
+                Some(sender_tag.clone()),
+            ))
+        } else {
+            Ok(Substream::new(
+                self.remote_recipient,
+                self.id.clone(),
+                id,
+                inbound_rx,
+                self.mixnet_outbound_tx.clone(),
+                close_rx,
+                self.message_nonce.clone(),
+            ))
+        }
     }
 
     fn handle_close(&mut self, substream_id: SubstreamId) -> Result<(), Error> {
@@ -207,7 +246,7 @@ impl StreamMuxer for Connection {
                     // send the response to the remote peer
                     self.mixnet_outbound_tx
                         .send(OutboundMessage {
-                            recipient: self.remote_recipient,
+                            recipient: Some(self.remote_recipient),
                             message: Message::TransportMessage(TransportMessage {
                                 nonce,
                                 id: self.id.clone(),
@@ -216,6 +255,7 @@ impl StreamMuxer for Connection {
                                     message_type: SubstreamMessageType::OpenResponse,
                                 },
                             }),
+                            sender_tag: self.sender_tag.clone(),
                         })
                         .map_err(|e| Error::OutboundSendFailure(e.to_string()))?;
                     debug!("wrote OpenResponse for substream: {:?}", &msg.substream_id);
@@ -323,20 +363,22 @@ mod test {
 
         // create the connections
         let (sender_inbound_tx, sender_inbound_rx) = unbounded_channel::<SubstreamMessage>();
-        let mut sender_connection = Connection::new(
+        let mut sender_connection = Connection::new_with_sender_tag(
             recipient_peer_id,
             recipient_address,
             connection_id.clone(),
             sender_inbound_rx,
             sender_outbound_tx,
+            None,
         );
         let (recipient_inbound_tx, recipient_inbound_rx) = unbounded_channel::<SubstreamMessage>();
-        let mut recipient_connection = Connection::new(
+        let mut recipient_connection = Connection::new_with_sender_tag(
             sender_peer_id,
             sender_address,
             connection_id.clone(),
             recipient_inbound_rx,
             recipient_outbound_tx,
+            None,
         );
 
         // send the substream OpenRequest to the mixnet

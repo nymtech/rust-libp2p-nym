@@ -6,6 +6,7 @@ use futures::{
     AsyncRead, AsyncWrite,
 };
 use log::debug;
+use nym_sdk::mixnet::AnonymousSenderTag;
 use nym_sphinx::addressing::clients::Recipient;
 use parking_lot::Mutex;
 use std::{
@@ -33,6 +34,8 @@ pub struct Substream {
     /// outbound messages; go directly to the mixnet
     outbound_tx: UnboundedSender<OutboundMessage>,
 
+    sender_tag: Option<AnonymousSenderTag>,
+
     /// used to signal when the substream is closed
     close_rx: Receiver<()>,
     closed: Mutex<bool>,
@@ -45,6 +48,30 @@ pub struct Substream {
 }
 
 impl Substream {
+    pub(crate) fn new_with_sender_tag(
+        remote_recipient: Recipient,
+        connection_id: ConnectionId,
+        substream_id: SubstreamId,
+        inbound_rx: UnboundedReceiver<Vec<u8>>,
+        outbound_tx: UnboundedSender<OutboundMessage>,
+        close_rx: Receiver<()>,
+        message_nonce: Arc<AtomicU64>,
+        sender_tag: Option<AnonymousSenderTag>,
+    ) -> Self {
+        Substream {
+            remote_recipient,
+            connection_id,
+            substream_id,
+            inbound_rx,
+            outbound_tx,
+            sender_tag,
+            close_rx,
+            closed: Mutex::new(false),
+            unread_data: Mutex::new(vec![]),
+            message_nonce,
+        }
+    }
+
     pub(crate) fn new(
         remote_recipient: Recipient,
         connection_id: ConnectionId,
@@ -54,17 +81,16 @@ impl Substream {
         close_rx: Receiver<()>,
         message_nonce: Arc<AtomicU64>,
     ) -> Self {
-        Substream {
+        Self::new_with_sender_tag(
             remote_recipient,
             connection_id,
             substream_id,
             inbound_rx,
             outbound_tx,
             close_rx,
-            closed: Mutex::new(false),
-            unread_data: Mutex::new(vec![]),
             message_nonce,
-        }
+            None,
+        )
     }
 
     fn check_closed(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Result<(), IoError> {
@@ -162,7 +188,11 @@ impl AsyncWrite for Substream {
 
         self.outbound_tx
             .send(OutboundMessage {
-                recipient: self.remote_recipient,
+                recipient: if self.sender_tag.is_some() {
+                    None
+                } else {
+                    Some(self.remote_recipient)
+                },
                 message: Message::TransportMessage(TransportMessage {
                     nonce,
                     id: self.connection_id.clone(),
@@ -171,6 +201,7 @@ impl AsyncWrite for Substream {
                         buf.to_vec(),
                     ),
                 }),
+                sender_tag: self.sender_tag.clone(),
             })
             .map_err(|e| {
                 IoError::new(
@@ -180,14 +211,6 @@ impl AsyncWrite for Substream {
             })?;
 
         Poll::Ready(Ok(buf.len()))
-    }
-
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), IoError>> {
-        if let Err(e) = self.check_closed(cx) {
-            return Poll::Ready(Err(e));
-        }
-
-        Poll::Ready(Ok(()))
     }
 
     fn poll_close(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<(), IoError>> {
@@ -203,12 +226,17 @@ impl AsyncWrite for Substream {
         // send a close message to the mixnet
         self.outbound_tx
             .send(OutboundMessage {
-                recipient: self.remote_recipient,
+                recipient: if self.sender_tag.is_some() {
+                    None
+                } else {
+                    Some(self.remote_recipient)
+                },
                 message: Message::TransportMessage(TransportMessage {
                     nonce,
                     id: self.connection_id.clone(),
                     message: SubstreamMessage::new_close(self.substream_id.clone()),
                 }),
+                sender_tag: self.sender_tag.clone(),
             })
             .map_err(|e| {
                 IoError::new(
@@ -216,6 +244,14 @@ impl AsyncWrite for Substream {
                     format!("poll_close outbound_rx error: {}", e),
                 )
             })?;
+
+        Poll::Ready(Ok(()))
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), IoError>> {
+        if let Err(e) = self.check_closed(cx) {
+            return Poll::Ready(Err(e));
+        }
 
         Poll::Ready(Ok(()))
     }

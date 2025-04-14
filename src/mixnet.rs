@@ -7,6 +7,7 @@ use nym_sdk::mixnet::{
 use nym_sphinx::addressing::clients::Recipient;
 use nym_sphinx::receiver::ReconstructedMessage;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
+use tracing::info;
 
 use super::error::Error;
 use super::message::*;
@@ -77,7 +78,9 @@ async fn handle_inbound(
     msg: ReconstructedMessage,
     inbound_tx: &UnboundedSender<InboundMessage>,
 ) -> Result<(), Error> {
-    let data = parse_message_data(&msg.message)?;
+    let sender_tag = msg.sender_tag.clone();
+
+    let data = parse_message_data(&msg.message, sender_tag)?;
     inbound_tx
         .send(data)
         .map_err(|e| Error::InboundSendFailure(e.to_string()))?;
@@ -90,12 +93,36 @@ async fn check_outbound(
 ) -> Result<(), Error> {
     match outbound_rx.recv().await {
         Some(message) => {
-            write_bytes(
-                mixnet_sender,
-                message.recipient,
-                &message.message.to_bytes(),
-            )
-            .await
+            match (&message.recipient, &message.sender_tag) {
+                (_, Some(sender_tag)) => {
+                    // sender_tag for anonymous replies
+                    info!(
+                        "writing reply to sender_tag {:?}",
+                        sender_tag.to_base58_string()
+                    );
+                    write_reply_bytes(
+                        mixnet_sender,
+                        sender_tag.clone(),
+                        &message.message.to_bytes(),
+                    )
+                    .await
+                }
+                (Some(recipient), None) => {
+                    // recipient for initial messages
+                    info!("sending message to recipient {:}", recipient);
+                    write_bytes(
+                        mixnet_sender,
+                        recipient.clone(),
+                        &message.message.to_bytes(),
+                    )
+                    .await
+                }
+                (None, None) => {
+                    return Err(Error::OutboundSendFailure(
+                        "No recipient or sender_tag provided, cannot route message".to_string(),
+                    ));
+                }
+            }
         }
         None => Err(Error::RecvFailure),
     }
@@ -112,10 +139,7 @@ async fn write_bytes(
     {
         return Err(Error::Unimplemented);
     }
-    debug!(
-        "wrote message to mixnet: recipient: {:?}",
-        recipient.to_string()
-    );
+    debug!("wrote message to recipient: {:?}", recipient.to_string());
     Ok(())
 }
 
@@ -127,10 +151,7 @@ async fn write_reply_bytes(
     if let Err(_err) = mixnet_sender.send_reply(sender_tag, message).await {
         return Err(Error::Unimplemented);
     }
-    debug!(
-        "wrote reply to mixnet: sender_tag: {:?}",
-        sender_tag.to_string()
-    );
+    debug!("wrote reply to sender_tag: {:?}", sender_tag.to_string());
     Ok(())
 }
 
@@ -159,7 +180,8 @@ mod test {
         // send a message to ourselves through the mixnet
         let out_msg = message::OutboundMessage {
             message: msg,
-            recipient: self_address,
+            recipient: Some(self_address),
+            sender_tag: None,
         };
 
         outbound_tx.send(out_msg).unwrap();

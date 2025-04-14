@@ -6,7 +6,7 @@ use libp2p::core::{
 };
 use libp2p_identity::{Keypair, PeerId};
 use log::debug;
-use nym_sdk::mixnet::MixnetClient;
+use nym_sdk::mixnet::{AnonymousSenderTag, MixnetClient};
 use nym_sphinx::addressing::clients::Recipient;
 use std::{
     collections::HashMap,
@@ -189,17 +189,22 @@ impl NymTransport {
 
     // handle_connection_response resolves the pending connection corresponding to the response
     // (if there is one) into a Connection.
-    fn handle_connection_response(&mut self, msg: &ConnectionMessage) -> Result<(), Error> {
+    fn handle_connection_response(
+        &mut self,
+        msg: &ConnectionMessage,
+        sender_tag: Option<AnonymousSenderTag>,
+    ) -> Result<(), Error> {
         if self.connections.contains_key(&msg.id) {
             return Err(Error::ConnectionAlreadyEstablished);
         }
 
         if let Some(pending_conn) = self.pending_dials.remove(&msg.id) {
-            // resolve connection and put into pending_conn channel
+            // Create connection with sender_tag
             let (conn, conn_tx) = self.create_connection_types(
                 msg.peer_id,
                 pending_conn.remote_recipient,
                 msg.id.clone(),
+                sender_tag,
             );
 
             self.connections.insert(msg.id.clone(), conn_tx);
@@ -222,19 +227,31 @@ impl NymTransport {
 
     /// handle_connection_request handles an incoming connection request, sends back a
     /// connection response, and finally completes the upgrade into a Connection.
-    fn handle_connection_request(&mut self, msg: &ConnectionMessage) -> Result<Connection, Error> {
-        // this isn't needed anymore since we're going to use the sender_tag for replies, no need to attach the nym addr in the clear
-        // if msg.recipient.is_none() {
-        //     return Err(Error::NoneRecipientInConnectionRequest);
-        // }
-
+    fn handle_connection_request(
+        &mut self,
+        msg: &ConnectionMessage,
+        sender_tag: Option<AnonymousSenderTag>,
+    ) -> Result<Connection, Error> {
         // ensure we don't already have a conn with the same id
         if self.connections.contains_key(&msg.id) {
             return Err(Error::ConnectionIDExists);
         }
 
-        let (conn, conn_tx) =
-            self.create_connection_types(msg.peer_id, msg.recipient.unwrap(), msg.id.clone());
+        // We can still use the recipient from the message even with sender_tag
+        let recipient = if let Some(rec) = msg.recipient {
+            rec
+        } else {
+            return Err(Error::NoneRecipientInConnectionRequest);
+        };
+
+        // Create connection with sender_tag
+        let (conn, conn_tx) = self.create_connection_types(
+            msg.peer_id,
+            recipient,
+            msg.id.clone(),
+            sender_tag.clone(),
+        );
+
         self.connections.insert(msg.id.clone(), conn_tx);
         self.handle_message_queue_on_connection_initiation(&msg.id)?;
 
@@ -244,10 +261,12 @@ impl NymTransport {
             id: msg.id.clone(),
         };
 
+        // Send response using sender_tag if available
         self.outbound_tx
             .send(OutboundMessage {
                 message: Message::ConnectionResponse(resp),
-                recipient: msg.recipient.unwrap(),
+                recipient: Some(recipient),
+                sender_tag,
             })
             .map_err(|e| Error::OutboundSendFailure(e.to_string()))?;
 
@@ -258,7 +277,11 @@ impl NymTransport {
         Ok(conn)
     }
 
-    fn handle_transport_message(&mut self, msg: TransportMessage) -> Result<(), Error> {
+    fn handle_transport_message(
+        &mut self,
+        msg: TransportMessage,
+        sender_tag: Option<AnonymousSenderTag>,
+    ) -> Result<(), Error> {
         let queue = match self.message_queues.get_mut(&msg.id) {
             Some(queue) => queue,
             None => {
@@ -314,29 +337,32 @@ impl NymTransport {
         remote_peer_id: PeerId,
         recipient: Recipient,
         id: ConnectionId,
+        sender_tag: Option<AnonymousSenderTag>,
     ) -> (Connection, UnboundedSender<SubstreamMessage>) {
         let (inbound_tx, inbound_rx) = unbounded_channel::<SubstreamMessage>();
 
-        // representation of a connection; this contains channels for applications to read/write to.
-        let conn = Connection::new(
+        let conn = Connection::new_with_sender_tag(
             remote_peer_id,
             recipient,
             id,
             inbound_rx,
             self.outbound_tx.clone(),
+            sender_tag,
         );
 
-        // inbound_tx is what we write to when receiving messages on the mixnet,
         (conn, inbound_tx)
     }
 
     /// handle_inbound handles an inbound message from the mixnet, received via self.inbound_stream.
-    fn handle_inbound(&mut self, msg: Message) -> Result<InboundTransportEvent, Error> {
-        // TODO parse sender_tag from incoming message before matching, pass to handle_ fns
+    fn handle_inbound(
+        &mut self,
+        msg: Message,
+        sender_tag: Option<AnonymousSenderTag>,
+    ) -> Result<InboundTransportEvent, Error> {
         match msg {
             Message::ConnectionRequest(inner) => {
                 debug!("got inbound connection request {:?}", inner);
-                match self.handle_connection_request(&inner) {
+                match self.handle_connection_request(&inner, sender_tag) {
                     Ok(conn) => {
                         let (connection_tx, connection_rx) =
                             oneshot::channel::<(PeerId, Connection)>();
@@ -351,12 +377,12 @@ impl NymTransport {
             }
             Message::ConnectionResponse(msg) => {
                 debug!("got inbound connection response {:?}", msg);
-                self.handle_connection_response(&msg)
+                self.handle_connection_response(&msg, sender_tag)
                     .map(|_| InboundTransportEvent::ConnectionResponse)
             }
             Message::TransportMessage(msg) => {
                 debug!("got inbound TransportMessage: {:?}", msg);
-                self.handle_transport_message(msg)
+                self.handle_transport_message(msg, sender_tag)
                     .map(|_| InboundTransportEvent::TransportMessage)
             }
         }
@@ -386,7 +412,6 @@ impl Future for Upgrade {
             .map_err(|_| Error::RecvFailure)
     }
 }
-
 impl Transport for NymTransport {
     type Output = (PeerId, Connection);
     type Error = Error;
@@ -451,7 +476,8 @@ impl Transport for NymTransport {
             outbound_tx
                 .send(OutboundMessage {
                     message: Message::ConnectionRequest(msg),
-                    recipient,
+                    recipient: Some(recipient),
+                    sender_tag: None, // Add this field
                 })
                 .map_err(|e| Error::OutboundSendFailure(e.to_string()))?;
 
@@ -477,7 +503,7 @@ impl Transport for NymTransport {
 
         // check for and handle inbound messages
         while let Poll::Ready(Some(msg)) = self.inbound_stream.poll_next_unpin(cx) {
-            match self.handle_inbound(msg.0) {
+            match self.handle_inbound(msg.0, msg.1) {
                 Ok(event) => match event {
                     InboundTransportEvent::ConnectionRequest(upgrade) => {
                         debug!("InboundTransportEvent::ConnectionRequest");
@@ -548,12 +574,13 @@ mod test {
             let nonce = self.message_nonce.fetch_add(1, Ordering::SeqCst);
             self.mixnet_outbound_tx
                 .send(OutboundMessage {
-                    recipient: self.remote_recipient,
+                    recipient: Some(self.remote_recipient),
                     message: Message::TransportMessage(TransportMessage {
                         nonce,
                         id: self.id.clone(),
                         message: msg,
                     }),
+                    sender_tag: self.sender_tag.clone(),
                 })
                 .map_err(|e| Error::OutboundSendFailure(e.to_string()))?;
             Ok(())

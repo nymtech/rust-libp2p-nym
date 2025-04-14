@@ -318,19 +318,42 @@ impl Message {
 }
 
 /// InboundMessage represents an inbound mixnet message.
-pub(crate) struct InboundMessage(pub(crate) Message);
+pub(crate) struct InboundMessage(pub(crate) Message, pub(crate) Option<AnonymousSenderTag>);
 
 /// OutboundMessage represents an outbound mixnet message.
 #[derive(Debug)]
 pub(crate) struct OutboundMessage {
     pub(crate) message: Message,
-    pub(crate) recipient: Recipient,
+    pub(crate) recipient: Option<Recipient>,
+    pub(crate) sender_tag: Option<AnonymousSenderTag>,
 }
 
-pub(crate) fn parse_message_data(data: &[u8]) -> Result<InboundMessage, Error> {
+// TODO not sure this is needed..
+impl OutboundMessage {
+    pub(crate) fn new(message: Message, recipient: Recipient) -> Self {
+        Self {
+            message,
+            recipient: Some(recipient),
+            sender_tag: None,
+        }
+    }
+
+    pub(crate) fn new_reply(message: Message, sender_tag: AnonymousSenderTag) -> Self {
+        Self {
+            message,
+            recipient: None,
+            sender_tag: Some(sender_tag),
+        }
+    }
+}
+
+pub(crate) fn parse_message_data(
+    data: &[u8],
+    sender_tag: Option<AnonymousSenderTag>,
+) -> Result<InboundMessage, Error> {
     if data.len() < 2 {
         return Err(Error::InvalidMessageBytes);
     }
     let msg = Message::try_from_bytes(data.to_vec())?;
-    Ok(InboundMessage(msg))
+    Ok(InboundMessage(msg, sender_tag))
 }

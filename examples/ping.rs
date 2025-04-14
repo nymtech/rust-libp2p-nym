@@ -1,4 +1,4 @@
-// Copyright TODO based on the rust libp2p examples
+// Copyright TODO based on the rust libp2p examples check how to smush 2 together / if this is necessary
 
 use futures::prelude::*;
 use libp2p::SwarmBuilder;
@@ -11,7 +11,7 @@ use std::{error::Error, time::Duration};
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     pretty_env_logger::formatted_timed_builder()
-        .filter_level(LevelFilter::Debug)
+        .filter_level(LevelFilter::Info)
         .filter(Some("libp2p_ping"), LevelFilter::Debug)
         .init();
 
@@ -28,17 +28,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .with_tokio()
             .with_other_transport(|_| transport)?
             .with_behaviour(|_| ping::Behaviour::default())?
-            .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(20)))
+            .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(90))) // TODO this sets the config timeout for the ping example - change for keepalive behaviour if possible
             .build()
     };
 
     // Dial the peer identified by the multi-address given as the second
     // command-line argument, if any.
-    // if let Some(addr) = std::env::args().nth(1) {
-    //     let remote: Multiaddr = addr.parse()?;
-    //     swarm.dial(remote)?;
-    //     println!("Dialed {addr}")
-    // }
+    if let Some(addr) = std::env::args().nth(1) {
+        let remote: Multiaddr = addr.parse()?;
+        swarm.dial(remote)?;
+        println!("Dialed {addr}")
+    }
 
     loop {
         match swarm.select_next_some().await {

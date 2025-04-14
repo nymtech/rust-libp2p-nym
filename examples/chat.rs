@@ -1,4 +1,4 @@
-// Copyright TODO based on the rust libp2p examples
+// Copyright TODO based on the rust libp2p examples check how to smush 2 together / if this is necessary
 
 use futures::stream::StreamExt;
 use libp2p::{
@@ -25,8 +25,7 @@ struct MyBehaviour {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     pretty_env_logger::formatted_timed_builder()
-        .filter_level(LevelFilter::Warn)
-        .filter(Some("libp2p_ping"), LevelFilter::Debug)
+        .filter_level(LevelFilter::Info)
         .init();
 
     let local_key = Keypair::generate_ed25519();
