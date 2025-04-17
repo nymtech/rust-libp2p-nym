@@ -328,25 +328,6 @@ pub(crate) struct OutboundMessage {
     pub(crate) sender_tag: Option<AnonymousSenderTag>,
 }
 
-// TODO not sure this is needed..
-impl OutboundMessage {
-    pub(crate) fn new(message: Message, recipient: Recipient) -> Self {
-        Self {
-            message,
-            recipient: Some(recipient),
-            sender_tag: None,
-        }
-    }
-
-    pub(crate) fn new_reply(message: Message, sender_tag: AnonymousSenderTag) -> Self {
-        Self {
-            message,
-            recipient: None,
-            sender_tag: Some(sender_tag),
-        }
-    }
-}
-
 pub(crate) fn parse_message_data(
     data: &[u8],
     sender_tag: Option<AnonymousSenderTag>,
