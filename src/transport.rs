@@ -237,15 +237,8 @@ impl NymTransport {
             return Err(Error::ConnectionIDExists);
         }
 
-        // TODO remove comment We can still use the recipient from the message even with sender_tag
-        // let recipient = if let Some(rec) = msg.recipient {
-        //     rec
-        // } else {
-        //     return Err(Error::NoneRecipientInConnectionRequest);
-        // };
-
-        // TODO remove this placeholder once you comb through fns and actually remove the requrements - for the moment use our (receiver's) address
-        let remote_addr_for_conn = self.self_address.clone(); // Just a placeholder
+        // TODO remove this placeholder once you comb through fns and remove the requrements - for the moment use our (receiver's) address
+        let remote_addr_for_conn = self.self_address.clone();
 
         // Create connection with sender_tag
         let (conn, conn_tx) = self.create_connection_types(
@@ -280,11 +273,7 @@ impl NymTransport {
         Ok(conn)
     }
 
-    fn handle_transport_message(
-        &mut self,
-        msg: TransportMessage,
-        sender_tag: Option<AnonymousSenderTag>,
-    ) -> Result<(), Error> {
+    fn handle_transport_message(&mut self, msg: TransportMessage) -> Result<(), Error> {
         let queue = match self.message_queues.get_mut(&msg.id) {
             Some(queue) => queue,
             None => {
@@ -384,8 +373,11 @@ impl NymTransport {
                     .map(|_| InboundTransportEvent::ConnectionResponse)
             }
             Message::TransportMessage(msg) => {
-                debug!("got inbound TransportMessage: {:?}", msg);
-                self.handle_transport_message(msg, sender_tag)
+                debug!(
+                    "got inbound TransportMessage: {:?} from {:?}",
+                    msg, sender_tag
+                );
+                self.handle_transport_message(msg)
                     .map(|_| InboundTransportEvent::TransportMessage)
             }
         }
@@ -449,7 +441,7 @@ impl Transport for NymTransport {
     fn dial(
         &mut self,
         addr: Multiaddr,
-        _dial_opts: DialOpts, // unused for the moment
+        _dial_opts: DialOpts, // TODO unused for the moment - check where used elsewhere and bring in
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
         debug!("dialing {}", addr);
 
@@ -568,9 +560,9 @@ mod test {
         transport::{DialOpts, PortUse, Transport, TransportEvent},
         Endpoint, Multiaddr, StreamMuxer,
     };
-    use libp2p_identity::{Keypair, PeerId};
+    use libp2p_identity::Keypair;
     use log::info;
-    use nym_bin_common::logging::setup_logging;
+    // use nym_bin_common::logging::setup_logging;
     use nym_sdk::mixnet::MixnetClient;
     use std::{pin::Pin, str::FromStr, sync::atomic::Ordering};
     use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
@@ -943,5 +935,167 @@ mod test {
             .expect_err("should have timed out")
             .to_string()
             .contains("dial timed out"));
+    }
+
+    #[tokio::test]
+    async fn new_peer_id_per_conn() {
+        // setup_logging();
+        let client = MixnetClient::connect_new().await.unwrap();
+        let (dialer_notify_inbound_tx, mut dialer_notify_inbound_rx) = unbounded_channel();
+        let mut dialer_transport =
+            NymTransport::new_with_notify_inbound(client, dialer_notify_inbound_tx)
+                .await
+                .unwrap();
+
+        let client2 = MixnetClient::connect_new().await.unwrap();
+        let (listener_notify_inbound_tx, mut listener_notify_inbound_rx) = unbounded_channel();
+        let mut listener_transport =
+            NymTransport::new_with_notify_inbound(client2, listener_notify_inbound_tx)
+                .await
+                .unwrap();
+        let listener_multiaddr =
+            nym_address_to_multiaddress(listener_transport.self_address).unwrap();
+        assert_new_address_event(Pin::new(&mut dialer_transport)).await;
+        assert_new_address_event(Pin::new(&mut listener_transport)).await;
+
+        // dial the remote peer
+        let dial_opts = DialOpts {
+            role: Endpoint::Dialer,
+            port_use: PortUse::Reuse,
+        };
+        let mut dial = dialer_transport
+            .dial(listener_multiaddr.clone(), dial_opts)
+            .unwrap();
+
+        // poll the dial to send the connection request message
+        assert!(poll_fn(|cx| Pin::new(&mut dial).as_mut().poll_unpin(cx))
+            .now_or_never()
+            .is_none());
+        listener_notify_inbound_rx.recv().await.unwrap();
+
+        // should receive the connection request from the mixnet and send the connection response
+        let res = poll_fn(|cx| Pin::new(&mut listener_transport).as_mut().poll(cx)).await;
+        let mut upgrade = match res {
+            TransportEvent::Incoming {
+                listener_id,
+                upgrade,
+                local_addr,
+                send_back_addr,
+            } => {
+                assert_eq!(listener_id, listener_transport.listener_id);
+                assert_eq!(local_addr, listener_transport.listen_addr);
+                assert_eq!(send_back_addr, listener_transport.listen_addr);
+                upgrade
+            }
+            _ => panic!("expected TransportEvent::Incoming, got {:?}", res),
+        };
+        dialer_notify_inbound_rx.recv().await.unwrap();
+
+        // should receive the connection response from the mixnet
+        assert!(
+            poll_fn(|cx| Pin::new(&mut dialer_transport).as_mut().poll(cx))
+                .now_or_never()
+                .is_none()
+        );
+        info!("waiting for connections...");
+
+        let (_, listener_conn) = poll_fn(|cx| Pin::new(&mut upgrade).as_mut().poll_unpin(cx))
+            .now_or_never()
+            .expect("the upgrade should be ready")
+            .expect("the upgrade should not error");
+        let (_, dialer_conn) = poll_fn(|cx| Pin::new(&mut dial).as_mut().poll_unpin(cx))
+            .now_or_never()
+            .expect("the upgrade should be ready")
+            .expect("the upgrade should not error");
+        info!("connections established");
+
+        let conn1_listener_peer_id = listener_conn.peer_id;
+        info!(
+            "listener connection 1 has PeerId {}",
+            conn1_listener_peer_id
+        );
+        let conn1_dialer_peer_id = dialer_conn.peer_id;
+        info!("dialer connection 1 has PeerId {}", conn1_dialer_peer_id);
+
+        let id = dialer_transport.listener_id;
+        dialer_transport.remove_listener(id);
+        let res = poll_fn(|cx| Pin::new(&mut dialer_transport).as_mut().poll(cx)).await;
+        match res {
+            TransportEvent::ListenerClosed {
+                reason: Ok(()),
+                listener_id: id,
+            } => {
+                info!("emitted ListenerClosed event for listener_id {}", id)
+            }
+            _ => info!("listener not removed, something went wrong"),
+        };
+        let id = listener_transport.listener_id;
+        listener_transport.remove_listener(id);
+        let res = poll_fn(|cx| Pin::new(&mut listener_transport).as_mut().poll(cx)).await;
+        match res {
+            TransportEvent::ListenerClosed {
+                reason: Ok(()),
+                listener_id: id,
+            } => {
+                info!("emitted ListenerClosed event for listener_id {}", id)
+            }
+            _ => info!("listener not removed, something went wrong"),
+        };
+
+        // make another conn between the same peers
+        let mut dial = dialer_transport
+            .dial(listener_multiaddr, dial_opts)
+            .unwrap();
+
+        assert!(poll_fn(|cx| Pin::new(&mut dial).as_mut().poll_unpin(cx))
+            .now_or_never()
+            .is_none());
+        listener_notify_inbound_rx.recv().await.unwrap();
+
+        let res = poll_fn(|cx| Pin::new(&mut listener_transport).as_mut().poll(cx)).await;
+        let mut upgrade = match res {
+            TransportEvent::Incoming {
+                listener_id,
+                upgrade,
+                local_addr,
+                send_back_addr,
+            } => {
+                assert_eq!(listener_id, listener_transport.listener_id);
+                assert_eq!(local_addr, listener_transport.listen_addr);
+                assert_eq!(send_back_addr, listener_transport.listen_addr);
+                upgrade
+            }
+            _ => panic!("expected TransportEvent::Incoming, got {:?}", res),
+        };
+        dialer_notify_inbound_rx.recv().await.unwrap();
+
+        assert!(
+            poll_fn(|cx| Pin::new(&mut dialer_transport).as_mut().poll(cx))
+                .now_or_never()
+                .is_none()
+        );
+        info!("waiting for connections...");
+
+        let (_, listener_conn) = poll_fn(|cx| Pin::new(&mut upgrade).as_mut().poll_unpin(cx))
+            .now_or_never()
+            .expect("the upgrade should be ready")
+            .expect("the upgrade should not error");
+        let (_, dialer_conn) = poll_fn(|cx| Pin::new(&mut dial).as_mut().poll_unpin(cx))
+            .now_or_never()
+            .expect("the upgrade should be ready")
+            .expect("the upgrade should not error");
+        info!("connections established");
+
+        let conn2_listener_peer_id = listener_conn.peer_id;
+        info!(
+            "listener connection 2 has PeerId {}",
+            conn2_listener_peer_id
+        );
+        let conn2_dialer_peer_id = dialer_conn.peer_id;
+        info!("dialer connection 2 has PeerId {}", conn2_dialer_peer_id);
+
+        // the naming here is a little misleading, since it is the peerid of the dialer that is added to the Connection that is created by handing incoming conn requests,
+        // we want to check that these two don't match, as they're the PeerIds generated by the dialer and sent along when trying to connect to the listener
+        assert_ne!(conn1_listener_peer_id, conn2_listener_peer_id);
     }
 }

@@ -462,13 +462,4 @@ mod test {
         )
         .await;
     }
-
-    #[tokio::test]
-    async fn new_peer_id_per_conn() {
-        /*
-        - make client
-        - make 2 conns
-        - check each conn has different peerid
-        */
-    }
 }
