@@ -7,7 +7,7 @@ use libp2p::{
 };
 use libp2p::{Multiaddr, SwarmBuilder};
 use libp2p_identity::{Keypair, PeerId};
-use log::{debug, info, LevelFilter};
+use log::{info, LevelFilter};
 use rust_libp2p_nym::transport::NymTransport;
 use std::{
     collections::hash_map::DefaultHasher,
@@ -30,9 +30,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let local_key = Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
-    println!("Local peer id: {local_peer_id:?}");
+    info!("Local peer id: {local_peer_id:?}");
 
-    println!("Running `chat` example using NymTransport");
+    info!("Running `chat` example using NymTransport");
     let client = nym_sdk::mixnet::MixnetClient::connect_new().await?;
     let transport = NymTransport::new(client, local_key.clone()).await?;
 
@@ -74,14 +74,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Read full lines from stdin
     let mut stdin = io::BufReader::new(io::stdin()).lines();
 
-    println!("Enter messages via STDIN and they will be sent to connected peers using Gossipsub");
+    info!("Enter messages via STDIN and they will be sent to connected peers using Gossipsub");
 
     // Dial the peer identified by the multi-address given as the second
     // command-line argument, if any, else dial self
     if let Some(addr) = std::env::args().nth(1) {
         let remote: Multiaddr = addr.parse()?;
         swarm.dial(remote)?;
-        println!("Dialed {addr}")
+        info!("Dialed {addr}")
     }
 
     // Kick it off
@@ -91,7 +91,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 if let Err(e) = swarm
                     .behaviour_mut().gossipsub
                     .publish(topic.clone(), line.as_bytes()) {
-                    println!("Publish error: {e:?}");
+                    info!("Publish error: {e:?}");
                 }
             }
             event = swarm.select_next_some() => match event {
@@ -99,12 +99,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     propagation_source: peer_id,
                     message_id: id,
                     message,
-                })) => println!(
+                })) => info!(
                         "Got message: '{}' with id: {id} from peer: {peer_id}",
                         String::from_utf8_lossy(&message.data),
                     ),
                 SwarmEvent::NewListenAddr { address, .. } => {
-                    println!("Local node is listening on {address}");
+                    info!("Local node is listening on {address}");
                 }
                 _ => {}
             }
