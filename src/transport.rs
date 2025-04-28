@@ -414,6 +414,7 @@ impl Transport for NymTransport {
     type Dial = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
     // Since we're setting up our listener in mixnet::initialize_mixnet() then just impl the required function signature for the trait but we won't use it
+    // this is maybe a bit weird in libp2p world since the creation of a Nym Transport means you are automatically listening, and the port allocation is handled by the Nym SDK not the upstream app cf. https://docs.libp2p.io/concepts/transports/listen-and-dial/#common-transport-interfaces
     fn listen_on(
         &mut self,
         _listner_id: ListenerId,
