@@ -161,12 +161,14 @@ impl AsyncRead for Substream {
 
             let copied = std::cmp::min(remaining_len, data_len);
             buf[filled_len..filled_len + copied].copy_from_slice(&data[..copied]);
-            debug!("poll_read copied {} bytes: data {:?}", copied, buf);
+            // debug!("poll_read copied {} bytes: data {:?}", copied, buf);
+            debug!("poll_read copied {} bytes", copied);
             return Poll::Ready(Ok(copied));
         }
 
         if filled_len > 0 {
-            debug!("poll_read copied {} bytes: data {:?}", filled_len, buf);
+            // debug!("poll_read copied {} bytes: data {:?}", filled_len, buf);
+            debug!("poll_read copied {} bytes", filled_len);
             return Poll::Ready(Ok(filled_len));
         }
 

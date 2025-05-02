@@ -96,7 +96,7 @@ async fn check_outbound(
             match (&message.recipient, &message.sender_tag) {
                 (_, Some(sender_tag)) => {
                     // sender_tag for anonymous replies
-                    info!(
+                    debug!(
                         "writing reply to sender_tag {:?}",
                         sender_tag.to_base58_string()
                     );
@@ -109,7 +109,7 @@ async fn check_outbound(
                 }
                 (Some(recipient), None) => {
                     // recipient for initial messages
-                    info!("sending message to recipient {:}", recipient);
+                    debug!("sending message to recipient {:}", recipient);
                     write_bytes(
                         mixnet_sender,
                         recipient.clone(),

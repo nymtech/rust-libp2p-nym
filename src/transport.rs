@@ -237,7 +237,7 @@ impl NymTransport {
             return Err(Error::ConnectionIDExists);
         }
 
-        // TODO remove this placeholder once you comb through fns and remove the requrements - for the moment use our (receiver's) address
+        // TODO remove this placeholder once you comb through fns and remove the requrements - for the moment use our (receiver's) address - we don't know the dailer address, only the SURB bucket identifier
         let remote_addr_for_conn = self.self_address.clone();
 
         // Create connection with sender_tag
@@ -248,7 +248,11 @@ impl NymTransport {
             sender_tag.clone(),
         );
 
+        info!("Created connection: {:?}", conn);
+
         self.connections.insert(msg.id.clone(), conn_tx);
+        info!("Current active connections: {}", self.connections.len());
+
         self.handle_message_queue_on_connection_initiation(&msg.id)?;
 
         let resp = ConnectionMessage {
@@ -505,7 +509,7 @@ impl Transport for NymTransport {
             match self.handle_inbound(msg.0, msg.1) {
                 Ok(event) => match event {
                     InboundTransportEvent::ConnectionRequest(upgrade) => {
-                        debug!("InboundTransportEvent::ConnectionRequest");
+                        info!("InboundTransportEvent::ConnectionRequest");
                         return Poll::Ready(TransportEvent::Incoming {
                             listener_id: self.listener_id,
                             upgrade,
@@ -514,7 +518,7 @@ impl Transport for NymTransport {
                         });
                     }
                     InboundTransportEvent::ConnectionResponse => {
-                        debug!("InboundTransportEvent::ConnectionResponse");
+                        info!("InboundTransportEvent::ConnectionResponse");
                     }
                     InboundTransportEvent::TransportMessage => {
                         debug!("InboundTransportEvent::TransportMessage");

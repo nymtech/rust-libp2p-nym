@@ -6,7 +6,7 @@ use libp2p::{
     swarm::{NetworkBehaviour, SwarmEvent},
 };
 use libp2p::{Multiaddr, SwarmBuilder};
-use libp2p_identity::{Keypair, PeerId};
+use libp2p_identity::Keypair;
 use log::{info, LevelFilter};
 use rust_libp2p_nym::transport::NymTransport;
 use std::{
@@ -26,11 +26,11 @@ struct MyBehaviour {
 async fn main() -> Result<(), Box<dyn Error>> {
     pretty_env_logger::formatted_timed_builder()
         .filter_level(LevelFilter::Info)
+        .filter_module("rust_libp2p_nym", LevelFilter::Debug)
         .init();
 
     let local_key = Keypair::generate_ed25519();
-    let local_peer_id = PeerId::from(local_key.public());
-    info!("Local peer id: {local_peer_id:?}");
+    // let local_peer_id = PeerId::from(local_key.public());
 
     info!("Running `chat` example using NymTransport");
     let client = nym_sdk::mixnet::MixnetClient::connect_new().await?;
