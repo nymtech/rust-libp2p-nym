@@ -51,7 +51,6 @@ cargo test
 ```
 
 ## Ping example
-TODO once SURBs added
 ```
 # Terminal window 1 
 cargo run --example ping
