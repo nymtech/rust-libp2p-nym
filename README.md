@@ -52,6 +52,13 @@ cargo test
 
 ## Ping example
 TODO once SURBs added
+```
+# Terminal window 1 
+cargo run --example ping
+# this will log something like Listening on /nym/4Gf3CkYhc8tYzLsyWwboGVDgcVX9WHUrtbYtdb1Y5YiA.9n5XxwvyUuL9GVfFS9mwawSnG3hvaitDKq7HT8bMHTJb@C7J8SwZQqjWqhBryyjJxLt7FacVuPTwAmR2otGy53ayi - copy that /nym/ multiaddr 
 
-## Chat example
-TODO once SURBs added
+# Terminal window 2 
+cargo run --example ping -- <multiaddr from terminal 1> 
+```
+
+
