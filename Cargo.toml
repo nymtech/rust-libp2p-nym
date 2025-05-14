@@ -7,16 +7,16 @@ edition = "2021"
 futures = "0.3.26"
 hex = "0.4"
 libp2p = { version = "0.55.0", features = [
-    "identify",
-    "macros",
-    "ping",
-    "tokio",
-    "tcp",
-    "dns",
-    "websocket",
-    "noise",
-    # "yamux",
-    "gossipsub",
+  "identify",
+  "macros",
+  "ping",
+  "tokio",
+  "tcp",
+  "dns",
+  "websocket",
+  "noise",
+  # "yamux",
+  "gossipsub",
 ] }
 libp2p-identity = { version = "0.2.10", features = ["ed25519", "rand"] }
 multihash = "0.19"

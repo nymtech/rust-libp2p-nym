@@ -17,24 +17,18 @@ pub enum Error {
     NoConnectionForResponse,
     #[error("received ConnectionResponse but connection was already established")]
     ConnectionAlreadyEstablished,
-    #[error("received None recipient in ConnectionRequest")]
-    NoneRecipientInConnectionRequest,
     #[error("cannot handle connection request; already have connection with given ID")]
     ConnectionIDExists,
     #[error("no connection found for TransportMessage")]
     NoConnectionForTransportMessage,
     #[error("failed to decode ConnectionMessage; too short")]
     ConnectionMessageBytesTooShort,
-    #[error("failed to decode ConnectionMessage; no recipient")]
-    ConnectionMessageBytesNoRecipient,
     #[error("failed to decode ConnectionMessage; no peer ID")]
     ConnectionMessageBytesNoPeerId,
     #[error("invalid peer ID bytes")]
     InvalidPeerIdBytes,
     #[error("invalid recipient bytes")]
     InvalidRecipientBytes(#[from] RecipientFormattingError),
-    #[error("invalid recipient prefix byte")]
-    InvalidRecipientPrefixByte,
     #[error("failed to decode TransportMessage; too short")]
     TransportMessageBytesTooShort,
     #[error("failed to decode TransportMessage; invalid nonce")]

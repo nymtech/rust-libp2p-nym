@@ -237,7 +237,7 @@ impl NymTransport {
             return Err(Error::ConnectionIDExists);
         }
 
-        // TODO remove this placeholder once you comb through fns and remove the requrements - for the moment use our (receiver's) address - we don't know the dailer address, only the SURB bucket identifier
+        // TODO remove this placeholder once you comb through fns and remove the requrements - for the moment use our own (receiver's) address - we don't know the dailer address, only the SURB bucket identifier
         let remote_addr_for_conn = self.self_address.clone();
 
         // Create connection with sender_tag
@@ -257,7 +257,6 @@ impl NymTransport {
 
         let resp = ConnectionMessage {
             peer_id: self.peer_id(),
-            recipient: None,
             id: msg.id.clone(),
         };
 
@@ -467,7 +466,6 @@ impl Transport for NymTransport {
         // put ConnectionRequest message into outbound message channel
         let msg = ConnectionMessage {
             peer_id: connection_peer_id,
-            recipient: None, // was Some(self.self_address)
             id,
         };
 

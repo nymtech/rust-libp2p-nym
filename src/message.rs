@@ -7,7 +7,6 @@ use std::fmt::{Debug, Formatter};
 
 use super::error::Error;
 
-const RECIPIENT_LENGTH: usize = Recipient::LEN;
 const CONNECTION_ID_LENGTH: usize = 32;
 const SUBSTREAM_ID_LENGTH: usize = 32;
 
@@ -79,7 +78,7 @@ pub(crate) struct ConnectionMessage {
     pub(crate) id: ConnectionId,
     // only required if this is a ConnectionRequest.
     // this is the nym address of the initiator of a connection request, so the recipient could use it to reply. Lets keep that as a None for the moment.
-    pub(crate) recipient: Option<Recipient>,
+    // pub(crate) recipient: Option<Recipient>,
 }
 
 /// TransportMessage is sent over a connection after establishment.
@@ -113,13 +112,6 @@ impl Message {
 impl ConnectionMessage {
     fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = self.id.0.to_vec();
-        match self.recipient {
-            Some(recipient) => {
-                bytes.push(1u8);
-                bytes.append(&mut recipient.to_bytes().to_vec());
-            }
-            None => bytes.push(0u8),
-        }
         bytes.append(&mut self.peer_id.to_bytes());
         bytes
     }
@@ -130,45 +122,12 @@ impl ConnectionMessage {
         }
 
         let id = ConnectionId::from_bytes(&bytes[0..CONNECTION_ID_LENGTH]);
-        let recipient = match bytes[CONNECTION_ID_LENGTH] {
-            0u8 => None,
-            1u8 => {
-                if bytes.len() < CONNECTION_ID_LENGTH + 1 + RECIPIENT_LENGTH {
-                    return Err(Error::ConnectionMessageBytesNoRecipient);
-                }
 
-                let mut recipient_bytes = [0u8; RECIPIENT_LENGTH];
-                recipient_bytes[..].copy_from_slice(
-                    &bytes[CONNECTION_ID_LENGTH + 1..CONNECTION_ID_LENGTH + 1 + RECIPIENT_LENGTH],
-                );
-                Some(
-                    Recipient::try_from_bytes(recipient_bytes)
-                        .map_err(Error::InvalidRecipientBytes)?,
-                )
-            }
-            _ => {
-                return Err(Error::InvalidRecipientPrefixByte);
-            }
-        };
-        let peer_id = match recipient {
-            Some(_) => {
-                if bytes.len() < CONNECTION_ID_LENGTH + RECIPIENT_LENGTH + 2 {
-                    return Err(Error::ConnectionMessageBytesNoPeerId);
-                }
-                PeerId::from_bytes(&bytes[CONNECTION_ID_LENGTH + 1 + RECIPIENT_LENGTH..])
-                    .map_err(|_| Error::InvalidPeerIdBytes)?
-            }
-            None => {
-                if bytes.len() < CONNECTION_ID_LENGTH + 2 {
-                    return Err(Error::ConnectionMessageBytesNoPeerId);
-                }
-                PeerId::from_bytes(&bytes[CONNECTION_ID_LENGTH + 1..])
-                    .map_err(|_| Error::InvalidPeerIdBytes)?
-            }
-        };
+        let peer_id = PeerId::from_bytes(&bytes[CONNECTION_ID_LENGTH..])
+            .map_err(|_| Error::InvalidPeerIdBytes)?;
         Ok(ConnectionMessage {
             peer_id,
-            recipient,
+            // recipient,
             id,
         })
     }
