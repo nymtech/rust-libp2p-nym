@@ -15,6 +15,7 @@ use tokio::sync::{
     mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
     oneshot,
 };
+use tracing::field::debug;
 
 use super::error::Error;
 use super::message::{
@@ -28,7 +29,8 @@ use super::substream::Substream;
 #[derive(Debug)]
 pub struct Connection {
     pub(crate) peer_id: PeerId,
-    pub(crate) remote_recipient: Recipient,
+    /// This will be Some(Receipient) for dialing connections since the outbound conn knows the nym/ multiaddr of the recipient, whereas receivers of connection requests will reply with SURBs
+    pub(crate) remote_recipient: Option<Recipient>,
     pub(crate) id: ConnectionId,
 
     /// receive inbound messages from the `InnerConnection`
@@ -70,7 +72,7 @@ pub struct Connection {
 impl Connection {
     pub(crate) fn new_with_sender_tag(
         peer_id: PeerId,
-        remote_recipient: Recipient,
+        remote_recipient: Option<Recipient>,
         id: ConnectionId,
         inbound_rx: UnboundedReceiver<SubstreamMessage>,
         mixnet_outbound_tx: UnboundedSender<OutboundMessage>,
@@ -99,48 +101,46 @@ impl Connection {
     }
 
     fn new_outbound_substream(&mut self) -> Result<Substream, Error> {
+        debug!("new_outbound_substream called");
         let substream_id = SubstreamId::generate();
+        debug!("Generated substream_id: {:?}", substream_id);
         let nonce = self.message_nonce.fetch_add(1, Ordering::SeqCst);
+        debug!("Using nonce {}", nonce);
+        debug!("Connection sender_tag: {:?}", self.sender_tag);
+        debug!(
+            "About to send with sender_tag: {:?}",
+            self.sender_tag.is_some()
+        );
 
-        // Create an OutboundMessage with sender_tag if available
-        let outbound_msg = if let Some(sender_tag) = &self.sender_tag {
-            OutboundMessage {
-                recipient: None,
-                message: Message::TransportMessage(TransportMessage {
-                    nonce,
-                    id: self.id.clone(),
-                    message: SubstreamMessage {
-                        substream_id: substream_id.clone(),
-                        message_type: SubstreamMessageType::OpenRequest,
-                    },
-                }),
-                sender_tag: Some(sender_tag.clone()),
-            }
-        } else {
-            OutboundMessage {
-                recipient: Some(self.remote_recipient),
-                message: Message::TransportMessage(TransportMessage {
-                    nonce,
-                    id: self.id.clone(),
-                    message: SubstreamMessage {
-                        substream_id: substream_id.clone(),
-                        message_type: SubstreamMessageType::OpenRequest,
-                    },
-                }),
-                sender_tag: None,
-            }
+        let outbound_msg = OutboundMessage {
+            recipient: self.remote_recipient, // Some(Receipient) for dialer, None for receiver
+            message: Message::TransportMessage(TransportMessage {
+                nonce,
+                id: self.id.clone(),
+                message: SubstreamMessage {
+                    substream_id: substream_id.clone(),
+                    message_type: SubstreamMessageType::OpenRequest,
+                },
+            }),
+            sender_tag: self.sender_tag.clone(), // None for dialer, Some(sender_tag) for receiver
         };
 
+        debug!("Sending OpenRequest for substream: {:?}", substream_id);
         // Send the outbound message
-        self.mixnet_outbound_tx
-            .send(outbound_msg)
-            .map_err(|e| Error::OutboundSendFailure(e.to_string()))?;
+        self.mixnet_outbound_tx.send(outbound_msg).map_err(|e| {
+            debug!("Failed to send outbound message: {}", e);
+            Error::OutboundSendFailure(e.to_string())
+        })?;
 
+        debug!("Creating substream");
         // track pending outbound substreams
         // TODO we should probably lock this? storing map values should be atomic
         let res = self.new_substream(substream_id.clone());
         if res.is_ok() {
+            debug!("Adding to pending_substreams");
             self.pending_substreams.insert(substream_id);
+        } else {
+            debug!("Failed to create substream: {:?}", res);
         }
         res
     }
@@ -161,29 +161,16 @@ impl Connection {
             waker.wake();
         }
 
-        // Use new_with_sender_tag instead of new when sender_tag is present
-        if let Some(sender_tag) = &self.sender_tag {
-            Ok(Substream::new_with_sender_tag(
-                self.remote_recipient,
-                self.id.clone(),
-                id,
-                inbound_rx,
-                self.mixnet_outbound_tx.clone(),
-                close_rx,
-                self.message_nonce.clone(),
-                Some(sender_tag.clone()),
-            ))
-        } else {
-            Ok(Substream::new(
-                self.remote_recipient,
-                self.id.clone(),
-                id,
-                inbound_rx,
-                self.mixnet_outbound_tx.clone(),
-                close_rx,
-                self.message_nonce.clone(),
-            ))
-        }
+        Ok(Substream::new_with_sender_tag(
+            self.remote_recipient,
+            self.id.clone(),
+            id,
+            inbound_rx,
+            self.mixnet_outbound_tx.clone(),
+            close_rx,
+            self.message_nonce.clone(),
+            self.sender_tag.clone(), // Pass the connection's SURB directly
+        ))
     }
 
     fn handle_close(&mut self, substream_id: SubstreamId) -> Result<(), Error> {
@@ -221,7 +208,10 @@ impl StreamMuxer for Connection {
         mut self: Pin<&mut Self>,
         _cx: &mut Context<'_>,
     ) -> Poll<Result<Self::Substream, Self::Error>> {
-        Poll::Ready(self.new_outbound_substream())
+        debug!("poll_outbound called");
+        let result = self.new_outbound_substream();
+        debug!("poll_outbound result: {:?}", result.is_ok());
+        Poll::Ready(result)
     }
 
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
@@ -237,33 +227,44 @@ impl StreamMuxer for Connection {
         cx: &mut Context<'_>,
     ) -> Poll<Result<StreamMuxerEvent, Self::Error>> {
         while let Poll::Ready(Some(msg)) = self.inbound_rx.poll_recv(cx) {
+            debug!(
+                "Connection poll received message type: {:?} for substream: {:?}",
+                msg.message_type, msg.substream_id
+            );
             match msg.message_type {
                 SubstreamMessageType::OpenRequest => {
+                    debug!(
+                        "Processing OpenRequest for substream: {:?}",
+                        msg.substream_id
+                    );
                     // create a new substream with the given ID
                     let substream = self.new_substream(msg.substream_id.clone())?;
                     let nonce = self.message_nonce.fetch_add(1, Ordering::SeqCst);
 
+                    debug!("About to send OpenResponse with nonce: {}", nonce);
+                    debug!("Using sender_tag: {:?}", self.sender_tag);
+
                     // send the response to the remote peer
-                    self.mixnet_outbound_tx
-                        .send(OutboundMessage {
-                            // recipient: Some(self.remote_recipient),
-                            recipient: if self.sender_tag.is_some() {
-                                None
-                            } else {
-                                Some(self.remote_recipient)
+                    let response_msg = OutboundMessage {
+                        recipient: self.remote_recipient,
+                        message: Message::TransportMessage(TransportMessage {
+                            nonce,
+                            id: self.id.clone(),
+                            message: SubstreamMessage {
+                                substream_id: msg.substream_id.clone(),
+                                message_type: SubstreamMessageType::OpenResponse,
                             },
-                            message: Message::TransportMessage(TransportMessage {
-                                nonce,
-                                id: self.id.clone(),
-                                message: SubstreamMessage {
-                                    substream_id: msg.substream_id.clone(),
-                                    message_type: SubstreamMessageType::OpenResponse,
-                                },
-                            }),
-                            sender_tag: self.sender_tag.clone(),
-                        })
-                        .map_err(|e| Error::OutboundSendFailure(e.to_string()))?;
-                    debug!("wrote OpenResponse for substream: {:?}", &msg.substream_id);
+                        }),
+                        sender_tag: self.sender_tag.clone(),
+                    };
+
+                    debug!("Created OutboundMessage: {:?}", response_msg);
+
+                    self.mixnet_outbound_tx.send(response_msg).map_err(|e| {
+                        debug!("FAILED to send OpenResponse: {}", e);
+                        Error::OutboundSendFailure(e.to_string())
+                    })?;
+                    debug!("Queued OpenResponse for mixnet");
 
                     // send the substream to our own channel to be returned in poll_inbound
                     self.inbound_open_tx
@@ -273,6 +274,10 @@ impl StreamMuxer for Connection {
                     debug!("new inbound substream: {:?}", &msg.substream_id);
                 }
                 SubstreamMessageType::OpenResponse => {
+                    debug!(
+                        "Processing OpenResponse for substream: {:?}",
+                        msg.substream_id
+                    );
                     if !self.pending_substreams.remove(&msg.substream_id) {
                         debug!(
                             "SubstreamMessageType::OpenResponse no substream pending for ID: {:?}",
@@ -281,10 +286,11 @@ impl StreamMuxer for Connection {
                     }
                 }
                 SubstreamMessageType::Close => {
+                    debug!("Processing Close for substream: {:?}", msg.substream_id);
                     self.handle_close(msg.substream_id)?;
                 }
                 SubstreamMessageType::Data(data) => {
-                    debug!("SubstreamMessageType::Data: {:?}", &data);
+                    debug!("Processing Data: {:?}", &data);
                     let inbound_tx = self
                         .substream_inbound_txs
                         .get_mut(&msg.substream_id)
@@ -370,7 +376,7 @@ mod test {
         let (sender_inbound_tx, sender_inbound_rx) = unbounded_channel::<SubstreamMessage>();
         let mut sender_connection = Connection::new_with_sender_tag(
             recipient_peer_id,
-            recipient_address,
+            Some(recipient_address),
             connection_id.clone(),
             sender_inbound_rx,
             sender_outbound_tx,
@@ -379,7 +385,7 @@ mod test {
         let (recipient_inbound_tx, recipient_inbound_rx) = unbounded_channel::<SubstreamMessage>();
         let mut recipient_connection = Connection::new_with_sender_tag(
             sender_peer_id,
-            sender_address,
+            Some(sender_address),
             connection_id.clone(),
             recipient_inbound_rx,
             recipient_outbound_tx,

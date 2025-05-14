@@ -24,7 +24,7 @@ use tokio::sync::{
 
 #[derive(Debug)]
 pub struct Substream {
-    remote_recipient: Recipient,
+    remote_recipient: Option<Recipient>,
     connection_id: ConnectionId,
     pub(crate) substream_id: SubstreamId,
 
@@ -49,7 +49,7 @@ pub struct Substream {
 
 impl Substream {
     pub(crate) fn new_with_sender_tag(
-        remote_recipient: Recipient,
+        remote_recipient: Option<Recipient>,
         connection_id: ConnectionId,
         substream_id: SubstreamId,
         inbound_rx: UnboundedReceiver<Vec<u8>>,
@@ -73,7 +73,7 @@ impl Substream {
     }
 
     pub(crate) fn new(
-        remote_recipient: Recipient,
+        remote_recipient: Option<Recipient>,
         connection_id: ConnectionId,
         substream_id: SubstreamId,
         inbound_rx: UnboundedReceiver<Vec<u8>>,
@@ -190,11 +190,7 @@ impl AsyncWrite for Substream {
 
         self.outbound_tx
             .send(OutboundMessage {
-                recipient: if self.sender_tag.is_some() {
-                    None
-                } else {
-                    Some(self.remote_recipient)
-                },
+                recipient: self.remote_recipient,
                 message: Message::TransportMessage(TransportMessage {
                     nonce,
                     id: self.connection_id.clone(),
@@ -228,11 +224,7 @@ impl AsyncWrite for Substream {
         // send a close message to the mixnet
         self.outbound_tx
             .send(OutboundMessage {
-                recipient: if self.sender_tag.is_some() {
-                    None
-                } else {
-                    Some(self.remote_recipient)
-                },
+                recipient: self.remote_recipient,
                 message: Message::TransportMessage(TransportMessage {
                     nonce,
                     id: self.connection_id.clone(),
@@ -282,7 +274,7 @@ mod test {
         let (_, close_rx) = tokio::sync::oneshot::channel();
 
         let mut substream = Substream::new(
-            Recipient::try_from_base58_string("D1rrpsysCGCYXy9saP8y3kmNpGtJZUXN9SvFoUcqAsM9.9Ssso1ea5NfkbMASdiseDSjTN1fSWda5SgEVjdSN4CvV@GJqd3ZxpXWSNxTfx7B1pPtswpetH4LnJdFeLeuY5KUuN").unwrap(),
+            Some(Recipient::try_from_base58_string("D1rrpsysCGCYXy9saP8y3kmNpGtJZUXN9SvFoUcqAsM9.9Ssso1ea5NfkbMASdiseDSjTN1fSWda5SgEVjdSN4CvV@GJqd3ZxpXWSNxTfx7B1pPtswpetH4LnJdFeLeuY5KUuN").unwrap()),
             connection_id,
             substream_id,
             inbound_rx,
@@ -359,7 +351,7 @@ mod test {
         let (_, close_rx) = tokio::sync::oneshot::channel();
 
         let mut substream = Substream::new(
-            self_address,
+            Some(self_address),
             connection_id,
             substream_id,
             inbound_rx,
@@ -440,7 +432,7 @@ mod test {
         let (close_tx, close_rx) = tokio::sync::oneshot::channel();
 
         let mut substream = Substream::new(
-            self_address,
+            Some(self_address),
             connection_id,
             substream_id,
             inbound_rx,

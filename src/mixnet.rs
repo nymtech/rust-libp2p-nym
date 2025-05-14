@@ -93,6 +93,34 @@ async fn check_outbound(
 ) -> Result<(), Error> {
     match outbound_rx.recv().await {
         Some(message) => {
+            match &message.message {
+                Message::TransportMessage(tm) => match &tm.message.message_type {
+                    SubstreamMessageType::OpenResponse => {
+                        debug!("Outbound OpenResponse: nonce={}, substream={:?}, has_surb={}, has_recipient={}",
+                                               tm.nonce, tm.message.substream_id,
+                                               message.sender_tag.is_some(), message.recipient.is_some());
+                    }
+                    SubstreamMessageType::OpenRequest => {
+                        debug!("Outbound OpenRequest: nonce={}, substream={:?}, has_surb={}, has_recipient={}",
+                                               tm.nonce, tm.message.substream_id,
+                                               message.sender_tag.is_some(), message.recipient.is_some());
+                    }
+                    SubstreamMessageType::Data(_) => {
+                        debug!(
+                            "Outbound Data nonce={}, substream={:?}",
+                            tm.nonce, tm.message.substream_id
+                        );
+                    }
+                    SubstreamMessageType::Close => {
+                        debug!(
+                            "Outbound Close nonce={}, substream={:?}",
+                            tm.nonce, tm.message.substream_id
+                        );
+                    }
+                },
+                Message::ConnectionRequest(_) => debug!("OUTBOUND ConnectionRequest"),
+                Message::ConnectionResponse(_) => debug!("OUTBOUND ConnectionResponse"),
+            }
             match (&message.recipient, &message.sender_tag) {
                 (_, Some(sender_tag)) => {
                     // sender_tag for anonymous replies
@@ -118,6 +146,7 @@ async fn check_outbound(
                     .await
                 }
                 (None, None) => {
+                    debug!("No recipient or sender_tag provided, cannot route messag");
                     return Err(Error::OutboundSendFailure(
                         "No recipient or sender_tag provided, cannot route message".to_string(),
                     ));
