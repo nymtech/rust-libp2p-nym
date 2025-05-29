@@ -1,6 +1,6 @@
 # rust-libp2p-nym
 
-This repo contains an implementation of a libp2p transport using the Nym SDK.
+This repo contains an active work in progress implementation of a libp2p transport using the Nym SDK. It a fork of the work done by [Chainsafe](https://github.com/ChainSafe/rust-libp2p-nym) several years ago. 
 
 ## Usage
 
