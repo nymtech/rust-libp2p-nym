@@ -44,7 +44,7 @@ apt-get install protobuf-compiler
 yay protobuf
 ```
 
-Standard `cargo` command:
+Test with the standard `cargo` command:
 
 ```
 cargo test
@@ -57,7 +57,19 @@ cargo run --example ping
 # this will log something like Listening on /nym/4Gf3CkYhc8tYzLsyWwboGVDgcVX9WHUrtbYtdb1Y5YiA.9n5XxwvyUuL9GVfFS9mwawSnG3hvaitDKq7HT8bMHTJb@C7J8SwZQqjWqhBryyjJxLt7FacVuPTwAmR2otGy53ayi - copy that /nym/ multiaddr 
 
 # Terminal window 2 
-cargo run --example ping -- <multiaddr from terminal 1> 
+cargo run --example ping -- $multiaddr_from_clipboard 
 ```
 
+You will have to wait until the connection upgrade is complete, so you will see some back and forth messages between both clients before seeing any `ping` logging in the console. 
 
+## Chat example 
+```
+# Terminal window 1 
+cargo run --example chat  
+# this will log something like Listening on /nym/4Gf3CkYhc8tYzLsyWwboGVDgcVX9WHUrtbYtdb1Y5YiA.9n5XxwvyUuL9GVfFS9mwawSnG3hvaitDKq7HT8bMHTJb@C7J8SwZQqjWqhBryyjJxLt7FacVuPTwAmR2otGy53ayi - copy that /nym/ multiaddr 
+
+# Terminal window 2 
+cargo run --example chat -- $multiaddr_from_clipboard 
+```
+
+You will have to wait until the connection upgrade is complete, so you will see some back and forth messages between both clients before being able to send messages between them. Once the upgrade is complete and the connection is established, the example captures `STDIN` and pipes it to the other client. 
