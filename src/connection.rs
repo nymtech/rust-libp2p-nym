@@ -237,6 +237,13 @@ impl StreamMuxer for Connection {
                         "Processing OpenRequest for substream: {:?}",
                         msg.substream_id
                     );
+
+                    if self.remote_recipient.is_none() {
+                        debug!("Listener received OpenRequest - correcT");
+                    } else {
+                        debug!("Dialer received OpenRequest - something is not right here");
+                    }
+
                     // create a new substream with the given ID
                     let substream = self.new_substream(msg.substream_id.clone())?;
                     let nonce = self.message_nonce.fetch_add(1, Ordering::SeqCst);

@@ -266,6 +266,10 @@ impl NymTransport {
             })
             .map_err(|e| Error::OutboundSendFailure(e.to_string()))?;
 
+        debug!(
+            "Sent ConnectionResponse with sender_tag: {:?}",
+            sender_tag.is_some()
+        );
         if let Some(waker) = self.waker.take() {
             waker.wake();
         }
@@ -501,6 +505,15 @@ impl Transport for NymTransport {
 
         // check for and handle inbound messages
         while let Poll::Ready(Some(msg)) = self.inbound_stream.poll_next_unpin(cx) {
+            debug!(
+                "TRANSPORT: Received inbound message type: {:?}",
+                match &msg.0 {
+                    Message::ConnectionRequest(_) => "ConnectionRequest",
+                    Message::ConnectionResponse(_) => "ConnectionResponse",
+                    Message::TransportMessage(_) => "TransportMessage",
+                }
+            );
+
             match self.handle_inbound(msg.0, msg.1) {
                 Ok(event) => match event {
                     InboundTransportEvent::ConnectionRequest(upgrade) => {
@@ -562,7 +575,7 @@ mod test {
     };
     use libp2p_identity::Keypair;
     use log::{info, LevelFilter};
-    use nym_bin_common::logging::setup_logging;
+    // use nym_bin_common::logging::setup_logging;
     use nym_sdk::mixnet::MixnetClient;
     use std::{pin::Pin, str::FromStr, sync::atomic::Ordering};
     use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};

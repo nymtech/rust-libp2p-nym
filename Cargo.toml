@@ -6,23 +6,42 @@ edition = "2021"
 [dependencies]
 futures = "0.3.26"
 hex = "0.4"
-libp2p = { version = "0.55.0", features = [
-  "identify",
-  "macros",
-  "ping",
-  "tokio",
-  "tcp",
-  "dns",
-  "websocket",
-  "noise",
-  # "yamux",
-  "gossipsub",
+libp2p = { version = "=0.54.1", features = [
+    "identify",
+    "macros",
+    "ping",
+    "tokio",
+    "tcp",
+    "dns",
+    "websocket",
+    "noise",
+    "gossipsub",
 ] }
+# libp2p = { version = "=0.55.0", features = [
+#     "identify",
+#     "macros",
+#     "ping",
+#     "tokio",
+#     "tcp",
+#     "dns",
+#     "websocket",
+#     "noise",
+#     # "yamux",
+#     "gossipsub",
+# ] }
 libp2p-identity = { version = "0.2.10", features = ["ed25519", "rand"] }
 multihash = "0.19"
-nym-sdk = { git = "https://github.com/nymtech/nym", branch = "develop" }
-nym-sphinx = { git = "https://github.com/nymtech/nym", branch = "develop" }
-nym-bin-common = { git = "https://github.com/nymtech/nym", branch = "develop" }
+
+# last working commit / last release
+# nym-sdk = { git = "https://github.com/nymtech/nym", rev = "1c6db86259d08d80e8bcfbc4fcc71ccb147fcfd0" }
+# nym-sphinx = { git = "https://github.com/nymtech/nym", rev = "1c6db86259d08d80e8bcfbc4fcc71ccb147fcfd0" }
+# nym-bin-common = { git = "https://github.com/nymtech/nym", rev = "1c6db86259d08d80e8bcfbc4fcc71ccb147fcfd0" }
+
+# current release
+nym-sdk = { git = "https://github.com/nymtech/nym", rev = "0d420fb0a56f010b86562fb037034b1ae477a3b8" }
+nym-sphinx = { git = "https://github.com/nymtech/nym", rev = "0d420fb0a56f010b86562fb037034b1ae477a3b8" }
+nym-bin-common = { git = "https://github.com/nymtech/nym", rev = "0d420fb0a56f010b86562fb037034b1ae477a3b8" }
+
 parking_lot = "0.12"
 rand = { version = "0.8", features = ["std"] }
 rand_core = "0.6"
