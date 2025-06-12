@@ -57,10 +57,11 @@ You can either grab multiaddr from someone else sharing it out of band, or run t
 ```
 # Terminal window 1
 cargo run --example chat
-# this will log something like Listening on /nym/4Gf3CkYhc8tYzLsyWwboGVDgcVX9WHUrtbYtdb1Y5YiA.9n5XxwvyUuL9GVfFS9mwawSnG3hvaitDKq7HT8bMHTJb@C7J8SwZQqjWqhBryyjJxLt7FacVuPTwAmR2otGy53ayi - copy that /nym/ multiaddr
+# this will log the listen address of the listener peer:
+2025-06-12T07:14:09.499Z INFO  chat > 📋 To connect to this node, use: /nym/B9SXzkbeTbg22bC1NEiHE9dBA7BUDeXzEdH5BVYzGjdF.FwMChmPoowr18k1tTcgY4HTrKJLp8vofVtQKUKsjZGAN@mD6g3NYiWxkQSpVSJx7KbRjFgbSXkRn7zL6Mtq1bcvC
 
 # Terminal window 2
-cargo run --example chat -- $multiaddr_from_clipboard
+cargo run --example chat -- /nym/B9SXzkbeTbg22bC1NEiHE9dBA7BUDeXzEdH5BVYzGjdF.FwMChmPoowr18k1tTcgY4HTrKJLp8vofVtQKUKsjZGAN@mD6g3NYiWxkQSpVSJx7KbRjFgbSXkRn7zL6Mtq1bcvC
 ```
 
 You will have to wait until the connection upgrade is complete. If running with logging in `DEBUG` mode you will see a lot of back and forth messages between both cliente before the protocol negotiation is complete and you  are able tO send messages between them.
