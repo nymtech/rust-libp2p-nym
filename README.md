@@ -68,6 +68,35 @@ You will have to wait until the connection upgrade is complete. If running with 
 
 Once the protocol negotiation iS complete and the connection substreams are established, the example captures `STDIN` and pipes it to the other clients subscribed to the gossipsub topic.
 
+If you connect multiple clients you will see status / mesh logging like:
+
+```
+2025-06-12T07:23:11.908Z INFO  chat                                 > 📊 Status: 5 connected, 5 subscribed
+2025-06-12T07:23:11.908Z INFO  chat                                 > 🕸️ Gossipsub internal state:
+2025-06-12T07:23:11.908Z INFO  chat                                 >   All peers known to gossipsub: 5
+2025-06-12T07:23:11.908Z INFO  chat                                 >   Peers in mesh for topic: 5
+2025-06-12T07:23:11.908Z INFO  chat                                 >   Topics we know about: 1
+2025-06-12T07:23:11.908Z INFO  chat                                 >   Gossipsub peer 1: 12D3KooWGtvK (subscribed to 1 topics)
+2025-06-12T07:23:11.908Z INFO  chat                                 >   Gossipsub peer 2: 12D3KooWPDBY (subscribed to 1 topics)
+2025-06-12T07:23:11.908Z INFO  chat                                 >   Gossipsub peer 3: 12D3KooWHnoH (subscribed to 1 topics)
+2025-06-12T07:23:11.908Z INFO  chat                                 >   Gossipsub peer 4: 12D3KooWHUKF (subscribed to 1 topics)
+2025-06-12T07:23:11.908Z INFO  chat                                 >   Gossipsub peer 5: 12D3KooWKVjr (subscribed to 1 topics)
+2025-06-12T07:23:11.908Z INFO  chat                                 >   Mesh peer 1: 12D3KooWGtvK
+2025-06-12T07:23:11.908Z INFO  chat                                 >   Mesh peer 2: 12D3KooWHUKF
+2025-06-12T07:23:11.908Z INFO  chat                                 >   Mesh peer 3: 12D3KooWHnoH
+2025-06-12T07:23:11.908Z INFO  chat                                 >   Mesh peer 4: 12D3KooWKVjr
+2025-06-12T07:23:11.908Z INFO  chat                                 >   Mesh peer 5: 12D3KooWPDBY
+2025-06-12T07:23:11.909Z INFO  chat                                 >   👤 12D3KooWHnoH: connected=✅ subscribed=✅
+2025-06-12T07:23:11.909Z INFO  chat                                 >   👤 12D3KooWHUKF: connected=✅ subscribed=✅
+2025-06-12T07:23:11.909Z INFO  chat                                 >   👤 12D3KooWPDBY: connected=✅ subscribed=✅
+2025-06-12T07:23:11.909Z INFO  chat                                 >   👤 12D3KooWKVjr: connected=✅ subscribed=✅
+2025-06-12T07:23:11.909Z INFO  chat                                 >   👤 12D3KooWGtvK: connected=✅ subscribed=✅
+```
+
+Currently this information is done manaully as standard peer discovery mechanisms such as the Kademlia DHT are not yet adapted for Nym (but are on the development roadmap).
+
+If you wish to modify the verbosity of the logging, change `DEBUG` to `INFO` in the `pretty_env_logger::formatted_timed_builder()` starting on LN29.
+
 ## Ping example
 ```
 # Terminal window 1
