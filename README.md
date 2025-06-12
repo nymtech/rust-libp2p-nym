@@ -54,6 +54,13 @@ cargo test
 ## Chat example
 You can either grab multiaddr from someone else sharing it out of band, or run the chat in two terminal windows, and loop traffic through the mixnet between two local clients. If you are using an address from someone else, just run the second step of the below instructions.
 
+### ProtocolBerg Workshop Chat
+To join, run the following to connect to the workshop peer:
+```
+cargo run --example chat -- /nym/3NRXaVgffaa7dEfn4BpNhBRZ7rf4bjdtJxtS3XPeQF1s.HXxt1bJ2LAKMSFBCh9RNzKi8F46rSF2mhbPLorRt3wMt@9PG6vqoVniK7bWD7esueje9pD3P3iU3Md1T8FAuNQipW
+```
+
+### Local ChaT
 ```
 # Terminal window 1
 cargo run --example chat
