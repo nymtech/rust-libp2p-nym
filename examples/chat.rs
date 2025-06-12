@@ -25,11 +25,11 @@ struct MyBehaviour {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    // Enhanced logging setup
+    // Modify these values for different verbosity depending on how granularly you want to follow traffic in & out of your local client
     pretty_env_logger::formatted_timed_builder()
         .filter_level(LevelFilter::Info)
         .filter_module("rust_libp2p_nym", LevelFilter::Debug)
-        .filter_module("libp2p_gossipsub", LevelFilter::Debug)
+        .filter_module("libp2p_gossipsub", LevelFilter::Info)
         .filter_module("libp2p_swarm", LevelFilter::Debug)
         .init();
 
